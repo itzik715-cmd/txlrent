@@ -17,11 +17,7 @@ const statusTabs = [
   { key: 'archive', label: 'ארכיון' },
 ]
 
-const tierOptions = [
-  { value: '', label: 'ללא' },
-  { value: '2', label: 'רמה 2' },
-  { value: '4', label: 'רמה 4' },
-]
+const defaultTiers = ['1', '2', '3', '4']
 
 const emptyForm = {
   internalId: '',
@@ -48,6 +44,23 @@ export default function Computers() {
   const [detailId, setDetailId] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [editId, setEditId] = useState(null)
+  const [newTier, setNewTier] = useState('')
+
+  const { data: settings = {} } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data),
+  })
+
+  const tiers = settings.computer_tiers ? JSON.parse(settings.computer_tiers) : defaultTiers
+
+  const addTierMutation = useMutation({
+    mutationFn: (newTiers) => api.put('/settings', { computer_tiers: JSON.stringify(newTiers) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      toast.success('רמה נוספה')
+      setNewTier('')
+    },
+  })
 
   // Open detail from URL param (e.g. /computers?detail=xxx)
   useEffect(() => {
@@ -236,15 +249,41 @@ export default function Computers() {
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">רמת מחשב</label>
-              <select
-                value={form.tier}
-                onChange={(e) => updateField('tier', e.target.value)}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
-              >
-                {tierOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  value={form.tier}
+                  onChange={(e) => updateField('tier', e.target.value)}
+                  className="flex-1 px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+                >
+                  <option value="">ללא</option>
+                  {tiers.map(t => (
+                    <option key={t} value={t}>רמה {t}</option>
+                  ))}
+                </select>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={newTier}
+                    onChange={(e) => setNewTier(e.target.value)}
+                    placeholder="חדש"
+                    className="w-16 px-2 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-all duration-150"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newTier.trim() && !tiers.includes(newTier.trim())) {
+                        const updated = [...tiers, newTier.trim()].sort((a, b) => Number(a) - Number(b))
+                        addTierMutation.mutate(updated)
+                        updateField('tier', newTier.trim())
+                      }
+                    }}
+                    disabled={!newTier.trim() || tiers.includes(newTier.trim())}
+                    className="px-2 py-2 bg-accent text-white text-sm font-bold rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-30"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">סטטוס</label>
