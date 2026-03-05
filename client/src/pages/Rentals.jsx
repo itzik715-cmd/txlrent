@@ -277,26 +277,8 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
   const openAlertPreview = async () => {
     setAlertLoading(true)
     try {
-      // Fetch settings to build preview
-      const settingsRes = await api.get('/settings')
-      const s = settingsRes.data
-      const senderName = s.wa_sender_name || 'LapTrack'
-      const template = s.wa_template_expiring || `היי {clientName}, כאן {senderName} ממחלקת התפעול\nשמנו לב שבעוד {daysLeft} ימים ({expectedReturn}) מסתיימת לך תקופת השכרת המחשב {computerId}.\nלבחירה לחצו כאן: {responseUrl}`
-
-      const daysLeft = rental.expectedReturn
-        ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
-        : null
-
-      const msg = template
-        .replace(/\{clientName\}/g, rental.client?.contactName || rental.client?.name || rental.clientName || '')
-        .replace(/\{computerName\}/g, `${rental.computer?.brand || ''} ${rental.computer?.model || ''}`)
-        .replace(/\{computerId\}/g, rental.computer?.internalId || rental.computerInternalId || '')
-        .replace(/\{daysLeft\}/g, daysLeft !== null ? String(daysLeft) : 'לא ידוע')
-        .replace(/\{expectedReturn\}/g, rental.expectedReturn ? new Date(rental.expectedReturn).toLocaleDateString('he-IL') : 'חודשי')
-        .replace(/\{senderName\}/g, senderName)
-        .replace(/\{responseUrl\}/g, '(יצורף אוטומטית)')
-
-      setAlertMessage(msg)
+      const { data } = await api.post(`/whatsapp/prepare-alert/${rental.id}`)
+      setAlertMessage(data.message)
       setShowAlertPreview(true)
     } catch {
       toast.error('שגיאה בטעינת תבנית')

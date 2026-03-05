@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendWhatsApp, getWhatsAppSettings } = require('../services/notifications');
+const { sendWhatsApp, getWhatsAppSettings, shortenUrl } = require('../services/notifications');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -50,6 +50,48 @@ router.post('/send-test', async (req, res, next) => {
   }
 });
 
+// POST /api/whatsapp/prepare-alert/:rentalId — prepare alert message with shortened URL for preview
+router.post('/prepare-alert/:rentalId', async (req, res, next) => {
+  try {
+    const rental = await prisma.rental.findUnique({
+      where: { id: req.params.rentalId },
+      include: { client: true, computer: true },
+    });
+    if (!rental) return res.status(404).json({ error: 'השכרה לא נמצאה' });
+
+    const settings = await getWhatsAppSettings();
+    const senderName = settings.wa_sender_name || 'LapTrack';
+
+    let template = settings.wa_template_expiring || getDefaultTemplate();
+
+    // Create response token
+    const token = crypto.randomBytes(16).toString('hex');
+    await prisma.rentalResponse.create({
+      data: { token, rentalId: rental.id },
+    });
+
+    const rawUrl = `https://5.100.255.162/r/${token}`;
+    const responseUrl = await shortenUrl(rawUrl);
+
+    const daysLeft = rental.expectedReturn
+      ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    const message = template
+      .replace(/\{clientName\}/g, rental.client.contactName || rental.client.name)
+      .replace(/\{computerName\}/g, `${rental.computer.brand} ${rental.computer.model}`)
+      .replace(/\{computerId\}/g, rental.computer.internalId)
+      .replace(/\{daysLeft\}/g, daysLeft !== null ? String(daysLeft) : 'לא ידוע')
+      .replace(/\{expectedReturn\}/g, rental.expectedReturn ? new Date(rental.expectedReturn).toLocaleDateString('he-IL') : 'חודשי')
+      .replace(/\{senderName\}/g, senderName)
+      .replace(/\{responseUrl\}/g, responseUrl);
+
+    res.json({ message, phone: rental.client.phone });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/whatsapp/send-rental-alert/:rentalId — send expiring rental alert
 router.post('/send-rental-alert/:rentalId', async (req, res, next) => {
   try {
@@ -61,23 +103,18 @@ router.post('/send-rental-alert/:rentalId', async (req, res, next) => {
 
     const settings = await getWhatsAppSettings();
     const senderName = settings.wa_sender_name || 'LapTrack';
-    const baseUrl = settings.wa_base_url || 'https://5.100.255.162';
 
-    // Build template message
     let template = settings.wa_template_expiring || getDefaultTemplate();
 
     // Create response token
     const token = crypto.randomBytes(16).toString('hex');
     await prisma.rentalResponse.create({
-      data: {
-        token,
-        rentalId: rental.id,
-      },
+      data: { token, rentalId: rental.id },
     });
 
-    const responseUrl = `https://5.100.255.162/r/${token}`;
+    const rawUrl = `https://5.100.255.162/r/${token}`;
+    const responseUrl = await shortenUrl(rawUrl);
 
-    // Replace placeholders
     const daysLeft = rental.expectedReturn
       ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
       : null;
@@ -93,7 +130,6 @@ router.post('/send-rental-alert/:rentalId', async (req, res, next) => {
 
     const result = await sendWhatsApp(rental.client.phone, message);
 
-    // Log
     await prisma.whatsAppLog.create({
       data: {
         rentalId: rental.id,

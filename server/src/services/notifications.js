@@ -120,4 +120,17 @@ async function sendEmail(to, subject, body) {
   }
 }
 
-module.exports = { sendWhatsApp, sendEmail, getWhatsAppSettings };
+async function shortenUrl(url) {
+  try {
+    const resp = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
+    if (resp.ok) {
+      const short = await resp.text();
+      if (short.startsWith('http')) return short;
+    }
+  } catch (err) {
+    console.error('[URL Shortener] Failed:', err.message);
+  }
+  return url; // fallback to original
+}
+
+module.exports = { sendWhatsApp, sendEmail, getWhatsAppSettings, shortenUrl };
