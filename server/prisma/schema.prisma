@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+}
+
+model Computer {
+  id           String         @id @default(cuid())
+  internalId   String         @unique
+  model        String
+  brand        String
+  serial       String         @unique
+  specs        Json?
+  status       ComputerStatus @default(AVAILABLE)
+  priceMonthly Float
+  notes        String?
+  qrCode       String?
+  createdAt    DateTime       @default(now())
+  rentals      Rental[]
+}
+
+enum ComputerStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  LOST
+}
+
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  contactName String
+  phone       String
+  email       String?
+  address     String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  rentals     Rental[]
+  payments    Payment[]
+}
+
+model Rental {
+  id             String         @id @default(cuid())
+  computer       Computer       @relation(fields: [computerId], references: [id])
+  computerId     String
+  client         Client         @relation(fields: [clientId], references: [id])
+  clientId       String
+  startDate      DateTime
+  expectedReturn DateTime
+  actualReturn   DateTime?
+  priceMonthly   Float
+  status         RentalStatus   @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  billingCycles  BillingCycle[]
+}
+
+enum RentalStatus {
+  ACTIVE
+  RETURNED
+  OVERDUE
+}
+
+model BillingCycle {
+  id       String        @id @default(cuid())
+  rental   Rental        @relation(fields: [rentalId], references: [id])
+  rentalId String
+  amount   Float
+  dueDate  DateTime
+  paidDate DateTime?
+  status   BillingStatus @default(PENDING)
+}
+
+enum BillingStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model Payment {
+  id       String   @id @default(cuid())
+  client   Client   @relation(fields: [clientId], references: [id])
+  clientId String
+  amount   Float
+  date     DateTime @default(now())
+  method   String?
+  notes    String?
+}

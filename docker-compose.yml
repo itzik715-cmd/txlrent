@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: laptrack
+      POSTGRES_PASSWORD: laptrack_dev
+      POSTGRES_DB: laptrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./server
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://laptrack:laptrack_dev@postgres:5432/laptrack
+    depends_on:
+      - postgres
+
+  frontend:
+    build: ./client
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
