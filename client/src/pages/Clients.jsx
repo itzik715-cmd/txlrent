@@ -68,16 +68,18 @@ export default function Clients() {
     },
   })
 
-  const filtered = clients.filter((c) => {
-    const q = search.toLowerCase()
-    if (!q) return true
-    return (
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.contactPerson || c.contactName || '').toLowerCase().includes(q) ||
-      (c.phone || '').includes(q) ||
-      (c.email || '').toLowerCase().includes(q)
-    )
-  })
+  const filtered = clients
+    .filter((c) => {
+      const q = search.toLowerCase()
+      if (!q) return true
+      return (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.contactPerson || c.contactName || '').toLowerCase().includes(q) ||
+        (c.phone || '').includes(q) ||
+        (c.email || '').toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => (b.activeRentals || 0) - (a.activeRentals || 0))
 
   const openAdd = () => {
     setEditId(null)
@@ -121,18 +123,30 @@ export default function Clients() {
     { key: 'contactPerson', label: 'איש קשר' },
     { key: 'phone', label: 'טלפון' },
     { key: 'email', label: 'אימייל' },
-    ...(showArchived ? [] : [{
-      key: 'balance',
-      label: 'יתרת חוב',
-      render: (val) => {
-        const amount = val || 0
-        return (
-          <span className={amount > 0 ? 'text-red-status font-semibold' : 'text-text-primary'}>
-            {amount > 0 ? formatCurrency(amount) : '-'}
-          </span>
-        )
+    ...(showArchived ? [] : [
+      {
+        key: 'balance',
+        label: 'יתרת חוב',
+        render: (val) => {
+          const amount = val || 0
+          return (
+            <span className={amount > 0 ? 'text-red-status font-semibold' : 'text-text-primary'}>
+              {amount > 0 ? formatCurrency(amount) : '-'}
+            </span>
+          )
+        },
       },
-    }]),
+      {
+        key: 'activeRentals',
+        label: 'השכרות פעילות',
+        render: (val) => {
+          const count = val || 0
+          return count > 0
+            ? <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 text-xs font-bold text-white bg-accent rounded-full">{count}</span>
+            : <span className="text-text-tertiary text-xs">-</span>
+        },
+      },
+    ]),
     {
       key: 'actions',
       label: 'פעולות',

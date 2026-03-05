@@ -29,7 +29,7 @@ router.get('/', async (req, res, next) => {
         return sum + rental.billingCycles.reduce((s, bc) => s + bc.amount, 0);
       }, 0);
       const { rentals, ...clientData } = client;
-      return { ...clientData, outstandingBalance, balance: outstandingBalance, contactPerson: clientData.contactName, activeRentals: rentals.filter(r => r.status === 'ACTIVE').length };
+      return { ...clientData, outstandingBalance, balance: outstandingBalance, contactPerson: clientData.contactName, activeRentals: rentals.filter(r => r.status === 'ACTIVE' || r.status === 'OVERDUE').length };
     });
 
     res.json(result);
