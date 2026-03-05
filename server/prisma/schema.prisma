@@ -25,7 +25,8 @@ model Computer {
   serial       String         @unique
   specs        Json?
   status       ComputerStatus @default(AVAILABLE)
-  priceMonthly Float
+  priceMonthly Float          @default(0)
+  tier         String?
   notes        String?
   qrCode       String?
   createdAt    DateTime       @default(now())

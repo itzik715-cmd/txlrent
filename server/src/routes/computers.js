@@ -13,7 +13,8 @@ const computerSchema = z.object({
   serial: z.string().min(1, 'נדרש מספר סריאלי'),
   specs: z.any().optional(),
   status: z.enum(['AVAILABLE', 'RENTED', 'MAINTENANCE', 'LOST', 'SOLD', 'ARCHIVED']).optional(),
-  priceMonthly: z.number().positive('מחיר חודשי חייב להיות חיובי'),
+  priceMonthly: z.number().optional().default(0),
+  tier: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -260,6 +261,7 @@ router.post('/:id/clone', async (req, res, next) => {
           specs: computer.specs,
           status: 'AVAILABLE',
           priceMonthly: computer.priceMonthly,
+          tier: computer.tier,
           notes: computer.notes,
         },
       });

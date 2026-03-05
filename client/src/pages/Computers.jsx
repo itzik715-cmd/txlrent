@@ -17,6 +17,12 @@ const statusTabs = [
   { key: 'archive', label: 'ארכיון' },
 ]
 
+const tierOptions = [
+  { value: '', label: 'ללא' },
+  { value: '2', label: 'רמה 2' },
+  { value: '4', label: 'רמה 4' },
+]
+
 const emptyForm = {
   internalId: '',
   model: '',
@@ -25,7 +31,7 @@ const emptyForm = {
   ram: '',
   cpu: '',
   storage: '',
-  priceMonthly: '',
+  tier: '',
   status: 'AVAILABLE',
   notes: '',
 }
@@ -104,7 +110,7 @@ export default function Computers() {
       ram: computer.specs?.ram || '',
       cpu: computer.specs?.cpu || '',
       storage: computer.specs?.storage || '',
-      priceMonthly: computer.priceMonthly || '',
+      tier: computer.tier || '',
       status: computer.status || 'AVAILABLE',
       notes: computer.notes || '',
     })
@@ -119,10 +125,11 @@ export default function Computers() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    const { ram, cpu, storage, ...rest } = form
     saveMutation.mutate({
-      ...form,
-      priceMonthly: Number(form.priceMonthly),
-      specs: { ram: form.ram, cpu: form.cpu, storage: form.storage },
+      ...rest,
+      tier: form.tier || null,
+      specs: { ram, cpu, storage },
     })
   }
 
@@ -139,9 +146,9 @@ export default function Computers() {
       render: (val) => <StatusBadge status={val} />,
     },
     {
-      key: 'priceMonthly',
-      label: 'מחיר חודשי',
-      render: (val) => formatCurrency(val),
+      key: 'tier',
+      label: 'רמה',
+      render: (val) => val ? `רמה ${val}` : '-',
     },
     ...(isArchiveView ? [] : [{
       key: 'actions',
@@ -227,7 +234,18 @@ export default function Computers() {
               <FormField label="CPU" value={form.cpu} onChange={(v) => updateField('cpu', v)} placeholder="i7-1260P" />
               <FormField label="אחסון" value={form.storage} onChange={(v) => updateField('storage', v)} placeholder="512GB SSD" />
             </div>
-            <FormField label="מחיר חודשי" value={form.priceMonthly} onChange={(v) => updateField('priceMonthly', v)} type="number" />
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">רמת מחשב</label>
+              <select
+                value={form.tier}
+                onChange={(e) => updateField('tier', e.target.value)}
+                className="w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+              >
+                {tierOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">סטטוס</label>
               <select
@@ -404,10 +422,12 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
       {/* Status + Quick Stats */}
       <div className="flex flex-wrap gap-3 mb-5">
         <StatusBadge status={computer.status} />
-        <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-          <CreditCard className="w-3.5 h-3.5" />
-          <span>{formatCurrency(computer.priceMonthly)}/חודש</span>
-        </div>
+        {computer.tier && (
+          <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>רמה {computer.tier}</span>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 text-xs text-text-secondary">
           <Calendar className="w-3.5 h-3.5" />
           <span>{totalRentals} השכרות</span>
@@ -463,7 +483,7 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
             <DetailRow label="RAM" value={computer.specs?.ram} />
             <DetailRow label="CPU" value={computer.specs?.cpu} />
             <DetailRow label="אחסון" value={computer.specs?.storage} />
-            <DetailRow label="מחיר חודשי" value={formatCurrency(computer.priceMonthly)} />
+            <DetailRow label="רמת מחשב" value={computer.tier ? `רמה ${computer.tier}` : '-'} />
           </div>
           {computer.notes && (
             <div className="pt-2 border-t border-border">
