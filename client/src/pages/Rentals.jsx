@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User, MessageCircle, Monitor, Mail } from 'lucide-react'
@@ -985,6 +985,72 @@ function InfoCell({ label, value }) {
 }
 
 /* ─── New Rental Modal ─── */
+function SearchableSelect({ options, value, onChange, placeholder, inputClass }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+  const inputRef = useRef(null)
+
+  const selected = options.find(o => o.value === value)
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSelect = (val) => {
+    onChange(val)
+    setSearch('')
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        className={`${inputClass} cursor-pointer flex items-center justify-between`}
+        onClick={() => { setOpen(!open); setTimeout(() => inputRef.current?.focus(), 50) }}
+      >
+        <span className={selected ? 'text-text-primary' : 'text-text-tertiary'}>{selected ? selected.label : placeholder}</span>
+        <svg className={`w-4 h-4 text-text-tertiary transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      </div>
+      {open && (
+        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white border border-border rounded-sm shadow-lg max-h-[240px] flex flex-col">
+          <div className="p-2 border-b border-border">
+            <input
+              ref={inputRef}
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="הקלד לחיפוש..."
+              className="w-full px-2 py-1.5 text-sm bg-bg border border-border rounded-sm focus:outline-none focus:border-accent"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-text-tertiary text-center">לא נמצאו תוצאות</div>
+            ) : (
+              filtered.map(o => (
+                <div
+                  key={o.value}
+                  onClick={() => handleSelect(o.value)}
+                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-accent-soft hover:text-accent transition-colors ${value === o.value ? 'bg-accent-soft text-accent font-semibold' : 'text-text-primary'}`}
+                >
+                  {o.label}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      {/* Hidden required input for form validation */}
+      <input type="hidden" value={value} required />
+    </div>
+  )
+}
+
 function NewRentalModal({ clients, availableComputers, onClose, onSuccess }) {
   const [clientId, setClientId] = useState('')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
@@ -1065,12 +1131,13 @@ function NewRentalModal({ clients, availableComputers, onClose, onSuccess }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-text-secondary mb-1">לקוח</label>
-          <select value={clientId} onChange={(e) => setClientId(e.target.value)} required className={inputClass}>
-            <option value="">בחר לקוח</option>
-            {clients.map((c) => (
-              <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            options={clients.map(c => ({ value: c._id || c.id, label: c.name }))}
+            value={clientId}
+            onChange={setClientId}
+            placeholder="בחר לקוח"
+            inputClass={inputClass}
+          />
         </div>
 
         {/* Recurring toggle */}
