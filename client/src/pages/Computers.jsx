@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2, ChevronDown, Filter, X } from 'lucide-react'
+import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2, ChevronDown, Filter, X, UserPlus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import SearchInput from '../components/shared/SearchInput'
@@ -452,6 +452,15 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
   const [showNewIssue, setShowNewIssue] = useState(false)
   const [issueDesc, setIssueDesc] = useState('')
   const [resolveText, setResolveText] = useState({})
+  const [showAssign, setShowAssign] = useState(false)
+  const [assignClientId, setAssignClientId] = useState('')
+  const [assignClientSearch, setAssignClientSearch] = useState('')
+  const [assignClientOpen, setAssignClientOpen] = useState(false)
+  const [assignPrice, setAssignPrice] = useState('')
+  const [assignStart, setAssignStart] = useState(new Date().toISOString().split('T')[0])
+  const [assignEnd, setAssignEnd] = useState('')
+  const [assignRecurring, setAssignRecurring] = useState(false)
+  const assignClientRef = useRef(null)
 
   const cloneMutation = useMutation({
     mutationFn: (data) => api.post(`/computers/${computerId}/clone`, data).then((r) => r.data),
@@ -529,6 +538,32 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
   })
 
+  const { data: clients = [] } = useQuery({
+    queryKey: ['clients-list'],
+    queryFn: () => api.get('/clients').then(r => r.data),
+    enabled: showAssign,
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: (data) => api.post('/rentals', data).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['computer-detail', computerId] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      queryClient.invalidateQueries({ queryKey: ['rentals'] })
+      toast.success('המחשב שויך ללקוח בהצלחה')
+      setShowAssign(false)
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה ביצירת השכרה'),
+  })
+
+  // Close client dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => { if (assignClientRef.current && !assignClientRef.current.contains(e.target)) setAssignClientOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   if (isLoading) {
     return (
       <Modal title="טוען..." onClose={onClose} wide>
@@ -600,6 +635,132 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
               </div>
             </div>
             <StatusBadge status={activeRental.status} />
+          </div>
+        </div>
+      )}
+
+      {/* Assign to Client (when AVAILABLE) */}
+      {computer.status === 'AVAILABLE' && !showAssign && (
+        <div className="mb-5">
+          <button
+            onClick={() => { setShowAssign(true); setAssignPrice(computer.priceMonthly || '') }}
+            className="flex items-center gap-2 w-full px-4 py-3 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all"
+          >
+            <UserPlus className="w-4 h-4" />
+            שייך ללקוח
+          </button>
+        </div>
+      )}
+
+      {computer.status === 'AVAILABLE' && showAssign && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+              <UserPlus className="w-4 h-4" /> שיוך מחשב ללקוח
+            </h4>
+            <button onClick={() => setShowAssign(false)} className="text-green-700 hover:text-green-900">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Client searchable select */}
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">לקוח *</label>
+            <div ref={assignClientRef} className="relative">
+              <div
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm cursor-pointer flex items-center justify-between focus-within:border-accent"
+                onClick={() => { setAssignClientOpen(!assignClientOpen) }}
+              >
+                <span className={assignClientId ? 'text-text-primary' : 'text-text-tertiary'}>
+                  {assignClientId ? (clients.find(c => (c._id || c.id) === assignClientId)?.name || 'בחר לקוח') : 'בחר לקוח'}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-text-tertiary transition-transform ${assignClientOpen ? 'rotate-180' : ''}`} />
+              </div>
+              {assignClientOpen && (
+                <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white border border-border rounded-sm shadow-lg max-h-[200px] flex flex-col">
+                  <div className="p-2 border-b border-border">
+                    <div className="relative">
+                      <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary" />
+                      <input
+                        type="text"
+                        value={assignClientSearch}
+                        onChange={e => setAssignClientSearch(e.target.value)}
+                        placeholder="חיפוש לקוח..."
+                        className="w-full pr-8 pl-2 py-1.5 text-sm bg-bg border border-border rounded-sm focus:outline-none focus:border-accent"
+                        onClick={e => e.stopPropagation()}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto flex-1">
+                    {clients.filter(c => !c.archived && c.name.toLowerCase().includes(assignClientSearch.toLowerCase())).length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-text-tertiary text-center">לא נמצאו לקוחות</div>
+                    ) : (
+                      clients.filter(c => !c.archived && c.name.toLowerCase().includes(assignClientSearch.toLowerCase())).map(c => (
+                        <div
+                          key={c._id || c.id}
+                          onClick={() => { setAssignClientId(c._id || c.id); setAssignClientOpen(false); setAssignClientSearch('') }}
+                          className={`px-3 py-2 text-sm cursor-pointer hover:bg-accent-soft hover:text-accent transition-colors ${assignClientId === (c._id || c.id) ? 'bg-accent-soft text-accent font-semibold' : 'text-text-primary'}`}
+                        >
+                          {c.name}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">מחיר חודשי *</label>
+              <input type="number" value={assignPrice} onChange={e => setAssignPrice(e.target.value)} className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent" placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">תאריך התחלה *</label>
+              <input type="date" value={assignStart} onChange={e => setAssignStart(e.target.value)} className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent" />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={assignRecurring} onChange={e => { setAssignRecurring(e.target.checked); if (e.target.checked) setAssignEnd('') }} className="w-4 h-4 rounded border-border text-accent focus:ring-accent" />
+              <span className="text-xs font-medium text-text-secondary">חודשי מתחדש</span>
+            </label>
+            {!assignRecurring && (
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-text-secondary mb-1">תאריך סיום</label>
+                <input type="date" value={assignEnd} onChange={e => setAssignEnd(e.target.value)} min={assignStart} className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent" />
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <button onClick={() => setShowAssign(false)} className="px-3 py-2 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+              ביטול
+            </button>
+            <button
+              onClick={() => {
+                if (!assignClientId || !assignPrice || !assignStart) {
+                  toast.error('נא למלא לקוח, מחיר ותאריך התחלה')
+                  return
+                }
+                assignMutation.mutate({
+                  computerId,
+                  clientId: assignClientId,
+                  priceMonthly: Number(assignPrice),
+                  startDate: assignStart,
+                  expectedReturn: assignRecurring ? null : (assignEnd || null),
+                  recurring: assignRecurring,
+                })
+              }}
+              disabled={assignMutation.isPending || !assignClientId || !assignPrice}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              {assignMutation.isPending ? 'משייך...' : 'שייך ללקוח'}
+            </button>
           </div>
         </div>
       )}
