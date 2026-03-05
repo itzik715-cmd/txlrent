@@ -10,6 +10,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laptrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./server
@@ -17,8 +22,12 @@ services:
       - "3001:3001"
     environment:
       DATABASE_URL: postgresql://laptrack:laptrack_dev@postgres:5432/laptrack
+      JWT_SECRET: laptrack-prod-secret-k8s7d2m4
+      PORT: "3001"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build: ./client
