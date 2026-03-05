@@ -120,9 +120,13 @@ router.get('/summary', async (req, res, next) => {
       })),
       openDebts: openDebts.map(b => ({
         clientName: b.rental.client.name,
+        clientPhone: b.rental.client.phone,
+        clientEmail: b.rental.client.email,
         amount: b.amount,
+        dueDate: b.dueDate,
         daysOverdue: Math.floor((Date.now() - new Date(b.dueDate)) / (1000 * 60 * 60 * 24)),
         clientId: b.rental.clientId,
+        computerInternalId: b.rental.computer.internalId,
       })),
       recentActivity,
       clientResponses: clientResponses.map(r => ({

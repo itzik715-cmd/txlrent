@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Send,
   X,
+  Mail,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -41,9 +42,11 @@ const daysRemaining = (d) => {
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [resendPreview, setResendPreview] = useState(null) // { rentalId, phone, clientName, message }
+  const [resendPreview, setResendPreview] = useState(null)
   const [resendMessage, setResendMessage] = useState('')
   const [resendLoading, setResendLoading] = useState(false)
+  const [debtReminder, setDebtReminder] = useState(null) // { clientName, phone, email, amount, daysOverdue, computerInternalId }
+  const [debtMessage, setDebtMessage] = useState('')
 
   const handleMutation = useMutation({
     mutationFn: (id) => api.patch(`/dashboard/responses/${id}/handle`),
@@ -60,10 +63,18 @@ export default function Dashboard() {
         toast.success('הודעת WhatsApp נשלחה')
         setResendPreview(null)
         setResendMessage('')
+        setDebtReminder(null)
+        setDebtMessage('')
       } else toast.error(data.reason || 'שליחה נכשלה')
     },
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
   })
+
+  const openDebtReminder = (item) => {
+    const msg = `שלום ${item.clientName},\nברצוננו להזכיר כי קיימת יתרת חוב בסך ${Number(item.amount).toLocaleString('he-IL')} ₪ עבור השכרת מחשב ${item.computerInternalId}.\nמועד התשלום חלף לפני ${item.daysOverdue} ימים.\n\nנשמח להסדרת התשלום בהקדם.\nבברכה, קומפיוטר-רנט`
+    setDebtMessage(msg)
+    setDebtReminder(item)
+  }
 
   const openResendPreview = async (item) => {
     setResendLoading(true)
@@ -273,10 +284,14 @@ export default function Dashboard() {
                 <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
+                    <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">{item.computerInternalId}</span>
                     <span className="text-sm font-bold text-red-status">{formatCurrency(item.amount)}</span>
                     <span className="text-xs text-text-tertiary">{item.daysOverdue} ימים</span>
                   </div>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150">
+                  <button
+                    onClick={() => openDebtReminder(item)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-sm hover:opacity-90 transition-all duration-150"
+                  >
                     <Bell className="w-3 h-3" />
                     שלח תזכורת
                   </button>
@@ -374,6 +389,67 @@ export default function Dashboard() {
                 <Send className="w-3.5 h-3.5" />
                 {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Debt Reminder Modal */}
+      {debtReminder && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setDebtReminder(null); setDebtMessage('') }}>
+          <div className="bg-surface rounded-lg border border-border shadow-xl w-full max-w-lg mx-4 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-red-600" />
+                <h3 className="text-sm font-bold text-text-primary">תזכורת חוב — {debtReminder.clientName}</h3>
+                <span className="text-sm font-bold text-red-status">{formatCurrency(debtReminder.amount)}</span>
+              </div>
+              <button onClick={() => { setDebtReminder(null); setDebtMessage('') }} className="text-text-tertiary hover:text-text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-text-tertiary">
+              {debtReminder.phone && <span>טלפון: {debtReminder.phone}</span>}
+              {debtReminder.clientEmail && <span>אימייל: {debtReminder.clientEmail}</span>}
+            </div>
+            <textarea
+              value={debtMessage}
+              onChange={(e) => setDebtMessage(e.target.value)}
+              rows={8}
+              dir="rtl"
+              className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent transition-all duration-150 resize-y leading-relaxed"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setDebtReminder(null); setDebtMessage('') }}
+                className="px-4 py-2 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all"
+              >
+                ביטול
+              </button>
+              {debtReminder.clientEmail && (
+                <button
+                  onClick={() => {
+                    api.post('/whatsapp/send-custom', { phone: debtReminder.clientEmail, message: debtMessage, clientId: debtReminder.clientId })
+                      .then(() => { toast.success('אימייל נשלח (בקרוב)'); setDebtReminder(null); setDebtMessage('') })
+                      .catch(() => toast.error('שליחת אימייל נכשלה'))
+                  }}
+                  disabled={!debtMessage.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  שלח אימייל
+                </button>
+              )}
+              {debtReminder.phone && (
+                <button
+                  onClick={() => sendCustomMutation.mutate({ phone: debtReminder.phone, message: debtMessage, clientId: debtReminder.clientId })}
+                  disabled={!debtMessage.trim() || sendCustomMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
+                </button>
+              )}
             </div>
           </div>
         </div>
