@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Computers from './pages/Computers'
 import Clients from './pages/Clients'
 import Rentals from './pages/Rentals'
-import Billing from './pages/Billing'
+// import Billing from './pages/Billing'
 
 export default function App() {
   const { isAuthenticated, isLoading, initialize } = useAuthStore()
@@ -35,7 +35,7 @@ export default function App() {
         <Route path="/computers" element={<Computers />} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/rentals" element={<Rentals />} />
-        <Route path="/billing" element={<Billing />} />
+        {/* <Route path="/billing" element={<Billing />} /> */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

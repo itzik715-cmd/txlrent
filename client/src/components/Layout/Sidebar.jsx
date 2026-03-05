@@ -8,7 +8,7 @@ const navItems = [
   { to: '/computers', label: 'מחשבים', icon: Laptop },
   { to: '/clients', label: 'לקוחות', icon: Users },
   { to: '/rentals', label: 'השכרות', icon: FileText },
-  { to: '/billing', label: 'חיובים', icon: CreditCard },
+  // { to: '/billing', label: 'חיובים', icon: CreditCard },
 ]
 
 export default function Sidebar() {
