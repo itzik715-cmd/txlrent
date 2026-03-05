@@ -271,36 +271,87 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Row 3: Today's Returns */}
-      <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
-        <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-accent" />
-          <h2 className="text-sm font-bold text-text-primary">החזרות להיום</h2>
-        </div>
-        <div className="p-5">
-          {data.todayReturns && data.todayReturns.length > 0 ? (
-            <div className="space-y-3">
-              {data.todayReturns.map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
-                    <span className="text-xs text-text-tertiary">{item.computerInternalId || item.computerId}</span>
-                    <StatusBadge status={item.status || 'RENTED'} />
+      {/* Returns: Today + This Week side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Today's Returns */}
+        <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-accent" />
+            <h2 className="text-sm font-bold text-text-primary">החזרות להיום</h2>
+            {data.todayReturns?.length > 0 && (
+              <span className="text-xs font-bold text-white bg-accent rounded-full px-2 py-0.5">{data.todayReturns.length}</span>
+            )}
+          </div>
+          <div className="p-5 max-h-[350px] overflow-y-auto">
+            {data.todayReturns && data.todayReturns.length > 0 ? (
+              <div className="space-y-3">
+                {data.todayReturns.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
+                      <span className="text-xs text-text-tertiary">{item.computerInternalId || item.computerId}</span>
+                      <StatusBadge status={item.status || 'RENTED'} />
+                    </div>
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150">
+                      <Phone className="w-3 h-3" />
+                      התקשר
+                    </button>
                   </div>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150">
-                    <Phone className="w-3 h-3" />
-                    התקשר
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-text-tertiary text-sm py-4">אין החזרות להיום</p>
-          )}
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-text-tertiary text-sm py-4">אין החזרות להיום</p>
+            )}
+          </div>
+        </div>
+
+        {/* Week Returns */}
+        <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <Clock className="w-4 h-4 text-orange-status" />
+            <h2 className="text-sm font-bold text-text-primary">החזרות לשבוע הקרוב</h2>
+            {data.weekReturns?.length > 0 && (
+              <span className="text-xs font-bold text-white bg-orange-status rounded-full px-2 py-0.5">{data.weekReturns.length}</span>
+            )}
+          </div>
+          <div className="p-5 max-h-[350px] overflow-y-auto">
+            {data.weekReturns && data.weekReturns.length > 0 ? (
+              <div className="space-y-3">
+                {data.weekReturns.map((item, i) => {
+                  const days = daysRemaining(item.expectedReturn)
+                  let daysBg = 'bg-accent-soft'
+                  let daysColor = 'text-accent'
+                  if (days <= 1) {
+                    daysBg = 'bg-red-soft'
+                    daysColor = 'text-red-status'
+                  } else if (days <= 3) {
+                    daysBg = 'bg-orange-soft'
+                    daysColor = 'text-orange-status'
+                  }
+                  return (
+                    <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">
+                          {item.computerInternalId || item.computerId}
+                        </span>
+                        <span className="text-sm text-text-primary">{item.clientName}</span>
+                        <span className="text-xs text-text-tertiary">{formatDate(item.expectedReturn)}</span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${daysBg} ${daysColor}`}>
+                        {days <= 0 ? 'היום' : `עוד ${days} ימים`}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-text-tertiary text-sm py-4">אין החזרות השבוע</p>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Row 3: Open Debts */}
+      {/* Open Debts */}
       <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
           <CreditCard className="w-4 h-4 text-red-status" />
@@ -333,48 +384,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Row 4: Week Returns */}
-      <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
-        <div className="px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-bold text-text-primary">החזרות השבוע</h2>
-        </div>
-        <div className="p-5">
-          {data.weekReturns && data.weekReturns.length > 0 ? (
-            <div className="space-y-3">
-              {data.weekReturns.map((item, i) => {
-                const days = daysRemaining(item.expectedReturn)
-                let daysBg = 'bg-accent-soft'
-                let daysColor = 'text-accent'
-                if (days <= 1) {
-                  daysBg = 'bg-red-soft'
-                  daysColor = 'text-red-status'
-                } else if (days <= 3) {
-                  daysBg = 'bg-orange-soft'
-                  daysColor = 'text-orange-status'
-                }
-                return (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">
-                        {item.computerInternalId || item.computerId}
-                      </span>
-                      <span className="text-sm text-text-primary">{item.clientName}</span>
-                      <span className="text-xs text-text-tertiary">{formatDate(item.expectedReturn)}</span>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${daysBg} ${daysColor}`}>
-                      {days <= 0 ? 'היום' : `עוד ${days} ימים`}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <p className="text-center text-text-tertiary text-sm py-4">אין החזרות השבוע</p>
-          )}
-        </div>
-      </div>
-
-      {/* Row 5: Quick Actions */}
+      {/* Quick Actions */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <QuickAction icon={<Plus className="w-4 h-4" />} label="השכרה חדשה" onClick={() => navigate('/rentals')} />
         <QuickAction icon={<Plus className="w-4 h-4" />} label="לקוח חדש" onClick={() => navigate('/clients')} />
