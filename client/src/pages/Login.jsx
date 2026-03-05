@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Laptop } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 
 export default function Login() {
@@ -27,11 +26,17 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-text-primary rounded-lg mb-4">
-            <Laptop className="w-7 h-7 text-white" />
+          <div className="inline-flex items-center justify-center mb-4">
+            <svg width="56" height="62" viewBox="0 0 34 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 0L33.5 9.5V28.5L17 38L0.5 28.5V9.5L17 0Z" fill="#0693E3"/>
+              <rect x="9" y="13" width="16" height="10" rx="1.5" fill="white" stroke="white" strokeWidth="0.5"/>
+              <rect x="12" y="14.5" width="10" height="7" rx="1" fill="#0693E3"/>
+              <rect x="11" y="24" width="12" height="1.5" rx="0.75" fill="white"/>
+            </svg>
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">LapTrack</h1>
-          <p className="text-text-secondary mt-1 text-sm">ניהול השכרת מחשבים ניידים</p>
+          <h1 className="text-2xl font-extrabold text-text-primary tracking-tight">ComputeRent</h1>
+          <p className="text-accent font-semibold text-sm mt-0.5">T.X.L Group</p>
+          <p className="text-text-secondary mt-2 text-sm">מערכת ניהול השכרת מחשבים</p>
         </div>
 
         {/* Form */}
@@ -76,11 +81,15 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-text-primary text-white rounded-sm font-semibold hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+            className="w-full py-2.5 bg-accent text-white rounded-sm font-semibold hover:opacity-90 transition-all duration-150 disabled:opacity-50"
           >
             {loading ? 'מתחבר...' : 'כניסה'}
           </button>
         </form>
+
+        <p className="text-center text-text-tertiary text-xs mt-6">
+          073-3767888 &middot; txlcomp.co.il
+        </p>
       </div>
     </div>
   )
