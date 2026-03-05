@@ -136,8 +136,10 @@ router.get('/summary', async (req, res, next) => {
         createdAt: r.createdAt,
         clientName: r.rental.client.name,
         clientPhone: r.rental.client.phone,
+        clientEmail: r.rental.client.email,
         clientId: r.rental.clientId,
         computerInternalId: r.rental.computer.internalId,
+        computerName: `${r.rental.computer.brand} ${r.rental.computer.model}`,
         rentalId: r.rentalId,
       })),
       pendingAlerts: pendingAlerts.map(r => ({

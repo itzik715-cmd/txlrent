@@ -45,8 +45,15 @@ export default function Dashboard() {
   const [resendPreview, setResendPreview] = useState(null)
   const [resendMessage, setResendMessage] = useState('')
   const [resendLoading, setResendLoading] = useState(false)
-  const [debtReminder, setDebtReminder] = useState(null) // { clientName, phone, email, amount, daysOverdue, computerInternalId }
+  const [debtReminder, setDebtReminder] = useState(null)
   const [debtMessage, setDebtMessage] = useState('')
+  const [handlePreview, setHandlePreview] = useState(null) // { item, message }
+  const [handleMessage, setHandleMessage] = useState('')
+
+  const { data: settings = {} } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then(r => r.data),
+  })
 
   const handleMutation = useMutation({
     mutationFn: (id) => api.patch(`/dashboard/responses/${id}/handle`),
@@ -55,6 +62,25 @@ export default function Dashboard() {
       toast.success('סומן כטופל')
     },
   })
+
+  const defaultResponseTemplates = {
+    renew: `שלום {clientName},\nתודה על בחירתך לחדש את השכרת המחשב {computerId} ({computerName}).\nההשכרה חודשה בהצלחה לתקופה נוספת.\n\nבברכה, {senderName}`,
+    return_pickup: `שלום {clientName},\nתודה על פנייתך. קיבלנו את בקשתך להחזיר את מחשב {computerId} ({computerName}) לאחת מנקודות האיסוף.\n\nניתן להחזיר בשעות 09:00-17:00.\nבברכה, {senderName}`,
+    return_courier: `שלום {clientName},\nתודה על פנייתך. קיבלנו את בקשתך להזמנת שליח לאיסוף מחשב {computerId} ({computerName}).\n\nעלות האיסוף: 50 ₪\nניצור איתך קשר בהקדם לתיאום מועד האיסוף.\n\nבברכה, {senderName}`,
+  }
+
+  const openHandlePreview = (item) => {
+    const templateKey = `response_template_${item.choice}`
+    const rawTemplate = settings[templateKey] || defaultResponseTemplates[item.choice] || ''
+    const senderName = settings.wa_sender_name || 'LapTrack'
+    const message = rawTemplate
+      .replace(/\{clientName\}/g, item.clientName || '')
+      .replace(/\{computerId\}/g, item.computerInternalId || '')
+      .replace(/\{computerName\}/g, item.computerName || '')
+      .replace(/\{senderName\}/g, senderName)
+    setHandleMessage(message)
+    setHandlePreview(item)
+  }
 
   const sendCustomMutation = useMutation({
     mutationFn: (data) => api.post('/whatsapp/send-custom', data).then(r => r.data),
@@ -181,7 +207,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-text-tertiary">{formatDate(item.answeredAt)}</span>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleMutation.mutate(item.id) }}
+                          onClick={(e) => { e.stopPropagation(); openHandlePreview(item) }}
                           className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all"
                         >
                           <CheckCircle2 className="w-3 h-3" />
@@ -392,6 +418,101 @@ export default function Dashboard() {
                 <Send className="w-3.5 h-3.5" />
                 {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Handle Response Modal */}
+      {handlePreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setHandlePreview(null); setHandleMessage('') }}>
+          <div className="bg-surface rounded-lg border border-border shadow-xl w-full max-w-lg mx-4 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <h3 className="text-sm font-bold text-text-primary">טיפול בתגובה — {handlePreview.clientName}</h3>
+              </div>
+              <button onClick={() => { setHandlePreview(null); setHandleMessage('') }} className="text-text-tertiary hover:text-text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-text-tertiary">
+              <span>מחשב: {handlePreview.computerInternalId}</span>
+              {handlePreview.clientPhone && <span>טלפון: {handlePreview.clientPhone}</span>}
+              {handlePreview.clientEmail && <span>אימייל: {handlePreview.clientEmail}</span>}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="font-semibold text-text-secondary">בחירת הלקוח:</span>
+              <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                handlePreview.choice === 'renew' ? 'bg-green-soft text-green-status' :
+                handlePreview.choice === 'return_pickup' ? 'bg-accent-soft text-accent' :
+                'bg-orange-soft text-orange-status'
+              }`}>
+                {handlePreview.choice === 'renew' ? 'חידוש' : handlePreview.choice === 'return_pickup' ? 'החזרה לנקודת איסוף' : 'שליח לאיסוף'}
+              </span>
+            </div>
+            <textarea
+              value={handleMessage}
+              onChange={(e) => setHandleMessage(e.target.value)}
+              rows={8}
+              dir="rtl"
+              className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent transition-all duration-150 resize-y leading-relaxed"
+            />
+            <div className="flex gap-2 justify-between">
+              <button
+                onClick={() => {
+                  handleMutation.mutate(handlePreview.id)
+                  setHandlePreview(null)
+                  setHandleMessage('')
+                }}
+                className="px-3 py-2 text-xs font-medium text-text-secondary border border-border rounded-sm hover:border-accent hover:text-accent transition-all"
+              >
+                סמן כטופל בלי לשלוח
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setHandlePreview(null); setHandleMessage('') }}
+                  className="px-4 py-2 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all"
+                >
+                  סגור
+                </button>
+                {handlePreview.clientEmail && (
+                  <button
+                    onClick={() => {
+                      api.post('/whatsapp/send-email', { email: handlePreview.clientEmail, subject: 'עדכון מ-LapTrack', message: handleMessage, clientId: handlePreview.clientId })
+                        .then((res) => {
+                          if (res.data.sent) {
+                            toast.success('אימייל נשלח')
+                            handleMutation.mutate(handlePreview.id)
+                            setHandlePreview(null)
+                            setHandleMessage('')
+                          } else toast.error(res.data.reason || 'שליחת אימייל נכשלה')
+                        })
+                        .catch(() => toast.error('שליחת אימייל נכשלה'))
+                    }}
+                    disabled={!handleMessage.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    שלח אימייל
+                  </button>
+                )}
+                {handlePreview.clientPhone && (
+                  <button
+                    onClick={() => {
+                      sendCustomMutation.mutate({ phone: handlePreview.clientPhone, message: handleMessage, clientId: handlePreview.clientId })
+                      handleMutation.mutate(handlePreview.id)
+                      setHandlePreview(null)
+                      setHandleMessage('')
+                    }}
+                    disabled={!handleMessage.trim() || sendCustomMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

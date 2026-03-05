@@ -333,7 +333,33 @@ function TemplatesConfig({ settings }) {
 
 לבחירה לחצו כאן: {responseUrl}`
 
+  const defaultResponseTemplates = {
+    renew: `שלום {clientName},
+תודה על בחירתך לחדש את השכרת המחשב {computerId} ({computerName}).
+ההשכרה חודשה בהצלחה לתקופה נוספת.
+
+בברכה, {senderName}`,
+    return_pickup: `שלום {clientName},
+תודה על פנייתך. קיבלנו את בקשתך להחזיר את מחשב {computerId} ({computerName}) לאחת מנקודות האיסוף.
+
+נקודות האיסוף שלנו:
+📍 [כתובת נקודת איסוף]
+
+ניתן להחזיר בשעות 09:00-17:00.
+בברכה, {senderName}`,
+    return_courier: `שלום {clientName},
+תודה על פנייתך. קיבלנו את בקשתך להזמנת שליח לאיסוף מחשב {computerId} ({computerName}).
+
+עלות האיסוף: 50 ₪
+ניצור איתך קשר בהקדם לתיאום מועד האיסוף.
+
+בברכה, {senderName}`,
+  }
+
   const [template, setTemplate] = useState(settings.wa_template_expiring || defaultTemplate)
+  const [renewTemplate, setRenewTemplate] = useState(settings.response_template_renew || defaultResponseTemplates.renew)
+  const [pickupTemplate, setPickupTemplate] = useState(settings.response_template_return_pickup || defaultResponseTemplates.return_pickup)
+  const [courierTemplate, setCourierTemplate] = useState(settings.response_template_return_courier || defaultResponseTemplates.return_courier)
 
   const saveMutation = useMutation({
     mutationFn: (data) => api.put('/settings', data),
@@ -345,8 +371,24 @@ function TemplatesConfig({ settings }) {
 
   const inputClass = "w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
 
+  const previewVars = (text) => text
+    .replace(/\{clientName\}/g, 'ישראל ישראלי')
+    .replace(/\{computerName\}/g, 'LENOVO L13')
+    .replace(/\{computerId\}/g, 'TXL3881')
+    .replace(/\{daysLeft\}/g, '3')
+    .replace(/\{expectedReturn\}/g, '08/03/2026')
+    .replace(/\{senderName\}/g, settings.wa_sender_name || 'LapTrack')
+    .replace(/\{responseUrl\}/g, 'https://rent.txlcomp.co.il/r/abc123')
+
+  const responseVarsNote = (
+    <p className="text-xs text-text-tertiary">
+      משתנים זמינים: <code className="bg-bg px-1 rounded">{'{clientName}'}</code> <code className="bg-bg px-1 rounded">{'{computerId}'}</code> <code className="bg-bg px-1 rounded">{'{computerName}'}</code> <code className="bg-bg px-1 rounded">{'{senderName}'}</code>
+    </p>
+  )
+
   return (
     <div className="space-y-5">
+      {/* Expiring alert template */}
       <div className="bg-surface border border-border rounded-lg p-5 space-y-4">
         <h2 className="text-sm font-bold text-text-primary">תבנית הודעה — תזכורת החזרה</h2>
         <p className="text-xs text-text-tertiary">
@@ -359,22 +401,12 @@ function TemplatesConfig({ settings }) {
           className={inputClass + " resize-y font-mono text-xs leading-relaxed"}
           dir="rtl"
         />
-
-        {/* Preview */}
         <div>
           <h3 className="text-xs font-semibold text-text-secondary mb-2">תצוגה מקדימה:</h3>
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm whitespace-pre-wrap leading-relaxed" dir="rtl">
-            {template
-              .replace(/\{clientName\}/g, 'ישראל ישראלי')
-              .replace(/\{computerName\}/g, 'LENOVO L13')
-              .replace(/\{computerId\}/g, 'TXL3881')
-              .replace(/\{daysLeft\}/g, '3')
-              .replace(/\{expectedReturn\}/g, '08/03/2026')
-              .replace(/\{senderName\}/g, settings.wa_sender_name || 'LapTrack')
-              .replace(/\{responseUrl\}/g, 'https://rent.txlcomp.co.il/r/abc123')}
+            {previewVars(template)}
           </div>
         </div>
-
         <div className="flex gap-3 pt-2">
           <button
             onClick={() => saveMutation.mutate({ wa_template_expiring: template })}
@@ -386,6 +418,66 @@ function TemplatesConfig({ settings }) {
           </button>
           <button
             onClick={() => setTemplate(defaultTemplate)}
+            className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-accent transition-all duration-150"
+          >
+            שחזר ברירת מחדל
+          </button>
+        </div>
+      </div>
+
+      {/* Response templates */}
+      <div className="bg-surface border border-border rounded-lg p-5 space-y-4">
+        <h2 className="text-sm font-bold text-text-primary">תבניות טיפול בתגובת לקוח</h2>
+        <p className="text-xs text-text-tertiary">הודעות אלו נשלחות ללקוח כשלוחצים על "טופל" בדשבורד</p>
+
+        {/* Renew */}
+        <div className="space-y-2 border-b border-border pb-4">
+          <h3 className="text-xs font-bold text-green-600 flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> חידוש לתקופה נוספת</h3>
+          {responseVarsNote}
+          <textarea value={renewTemplate} onChange={e => setRenewTemplate(e.target.value)} rows={6} className={inputClass + " resize-y font-mono text-xs leading-relaxed"} dir="rtl" />
+          <div>
+            <h4 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h4>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs whitespace-pre-wrap leading-relaxed" dir="rtl">{previewVars(renewTemplate)}</div>
+          </div>
+        </div>
+
+        {/* Return pickup */}
+        <div className="space-y-2 border-b border-border pb-4">
+          <h3 className="text-xs font-bold text-blue-600 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> החזרה לנקודת איסוף</h3>
+          {responseVarsNote}
+          <textarea value={pickupTemplate} onChange={e => setPickupTemplate(e.target.value)} rows={6} className={inputClass + " resize-y font-mono text-xs leading-relaxed"} dir="rtl" />
+          <div>
+            <h4 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h4>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs whitespace-pre-wrap leading-relaxed" dir="rtl">{previewVars(pickupTemplate)}</div>
+          </div>
+        </div>
+
+        {/* Return courier */}
+        <div className="space-y-2 pb-2">
+          <h3 className="text-xs font-bold text-orange-600 flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> שליח לאיסוף</h3>
+          {responseVarsNote}
+          <textarea value={courierTemplate} onChange={e => setCourierTemplate(e.target.value)} rows={6} className={inputClass + " resize-y font-mono text-xs leading-relaxed"} dir="rtl" />
+          <div>
+            <h4 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h4>
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs whitespace-pre-wrap leading-relaxed" dir="rtl">{previewVars(courierTemplate)}</div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={() => saveMutation.mutate({
+              response_template_renew: renewTemplate,
+              response_template_return_pickup: pickupTemplate,
+              response_template_return_courier: courierTemplate,
+            })}
+            disabled={saveMutation.isPending}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {saveMutation.isPending ? 'שומר...' : 'שמור תבניות'}
+          </button>
+          <button
+            onClick={() => { setRenewTemplate(defaultResponseTemplates.renew); setPickupTemplate(defaultResponseTemplates.return_pickup); setCourierTemplate(defaultResponseTemplates.return_courier) }}
             className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-accent transition-all duration-150"
           >
             שחזר ברירת מחדל
