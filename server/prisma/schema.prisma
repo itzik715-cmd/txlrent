@@ -9,12 +9,14 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      String   @default("user")
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String
+  name       String
+  role       String   @default("user")
+  mfaEnabled Boolean  @default(false)
+  mfaSecret  String?
+  createdAt  DateTime @default(now())
 }
 
 model Computer {

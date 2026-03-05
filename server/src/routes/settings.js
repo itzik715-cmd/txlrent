@@ -40,7 +40,7 @@ router.put('/', async (req, res, next) => {
 router.get('/users', async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: { id: true, email: true, name: true, role: true, mfaEnabled: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
     res.json(users);
@@ -100,6 +100,19 @@ router.delete('/users/:id', async (req, res, next) => {
       return res.status(400).json({ error: 'לא ניתן למחוק את המשתמש האחרון' });
     }
     await prisma.user.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/settings/users/:id/mfa-reset — admin force disable MFA
+router.put('/users/:id/mfa-reset', async (req, res, next) => {
+  try {
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { mfaEnabled: false, mfaSecret: null },
+    });
     res.json({ success: true });
   } catch (err) {
     next(err);

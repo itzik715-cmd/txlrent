@@ -24,9 +24,14 @@ const useAuthStore = create((set) => ({
     }
   },
 
-  login: async (email, password) => {
-    const response = await api.post('/auth/login', { email, password })
-    const { token, user } = response.data
+  login: async (email, password, totpCode) => {
+    const response = await api.post('/auth/login', { email, password, totpCode })
+    const { token, user, mfaRequired } = response.data
+
+    if (mfaRequired) {
+      return { mfaRequired: true }
+    }
+
     localStorage.setItem('laptrack_token', token)
     localStorage.setItem('laptrack_user', JSON.stringify(user))
     set({ token, user, isAuthenticated: true })

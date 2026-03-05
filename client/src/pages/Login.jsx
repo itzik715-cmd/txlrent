@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { Shield } from 'lucide-react'
 import useAuthStore from '../store/authStore'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [totpCode, setTotpCode] = useState('')
+  const [mfaStep, setMfaStep] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const login = useAuthStore((s) => s.login)
@@ -13,9 +16,12 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(email, password)
+      const result = await login(email, password, mfaStep ? totpCode : undefined)
+      if (result?.mfaRequired) {
+        setMfaStep(true)
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'שם משתמש או סיסמה שגויים')
+      setError(err.response?.data?.error || err.response?.data?.message || 'שם משתמש או סיסמה שגויים')
     } finally {
       setLoading(false)
     }
@@ -44,33 +50,62 @@ export default function Login() {
           onSubmit={handleSubmit}
           className="bg-surface rounded-lg border border-border shadow-sm p-6 space-y-4"
         >
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
-              אימייל
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2.5 bg-bg border border-border rounded-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
-              placeholder="admin@laptrack.co.il"
-            />
-          </div>
+          {!mfaStep ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                  אימייל
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-3 py-2.5 bg-bg border border-border rounded-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+                  placeholder="admin@laptrack.co.il"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-1.5">
-              סיסמה
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2.5 bg-bg border border-border rounded-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
-              placeholder="הזן סיסמה"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                  סיסמה
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full px-3 py-2.5 bg-bg border border-border rounded-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+                  placeholder="הזן סיסמה"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-2 text-accent">
+                <Shield className="w-5 h-5" />
+                <span className="text-sm font-bold">אימות דו-שלבי</span>
+              </div>
+              <p className="text-xs text-text-tertiary text-center">הזן את הקוד מאפליקציית Google Authenticator</p>
+              <input
+                type="text"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                autoFocus
+                className="w-full px-3 py-3 bg-bg border border-border rounded-sm text-text-primary text-center text-2xl tracking-[0.5em] font-mono focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+                placeholder="000000"
+                dir="ltr"
+              />
+              <button
+                type="button"
+                onClick={() => { setMfaStep(false); setTotpCode(''); setError('') }}
+                className="w-full text-xs text-text-tertiary hover:text-accent transition-all"
+              >
+                חזרה לכניסה
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="text-red-status text-sm bg-red-soft px-3 py-2 rounded-sm">
@@ -80,10 +115,10 @@ export default function Login() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (mfaStep && totpCode.length !== 6)}
             className="w-full py-2.5 bg-accent text-white rounded-sm font-semibold hover:opacity-90 transition-all duration-150 disabled:opacity-50"
           >
-            {loading ? 'מתחבר...' : 'כניסה'}
+            {loading ? 'מתחבר...' : mfaStep ? 'אמת' : 'כניסה'}
           </button>
         </form>
 
