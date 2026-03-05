@@ -119,4 +119,72 @@ router.put('/users/:id/mfa-reset', async (req, res, next) => {
   }
 });
 
+// POST /api/settings/users/:id/mfa-setup — admin generate MFA QR for any user
+router.post('/users/:id/mfa-setup', async (req, res, next) => {
+  try {
+    const { TOTP, Secret } = require('otpauth');
+    const QRCode = require('qrcode');
+
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) return res.status(404).json({ error: 'משתמש לא נמצא' });
+
+    const secret = new Secret({ size: 20 });
+    const totp = new TOTP({
+      issuer: 'LapTrack',
+      label: user.email,
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret,
+    });
+
+    const uri = totp.toString();
+    const qrDataUrl = await QRCode.toDataURL(uri);
+
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { mfaSecret: secret.base32 },
+    });
+
+    res.json({ qr: qrDataUrl, secret: secret.base32 });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/settings/users/:id/mfa-verify — admin verify and enable MFA for any user
+router.post('/users/:id/mfa-verify', async (req, res, next) => {
+  try {
+    const { TOTP, Secret } = require('otpauth');
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'נדרש קוד אימות' });
+
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user || !user.mfaSecret) {
+      return res.status(400).json({ error: 'יש להגדיר MFA קודם' });
+    }
+
+    const totp = new TOTP({
+      secret: Secret.fromBase32(user.mfaSecret),
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+    });
+
+    const delta = totp.validate({ token: code, window: 1 });
+    if (delta === null) {
+      return res.status(400).json({ error: 'קוד שגוי, נסה שוב' });
+    }
+
+    await prisma.user.update({
+      where: { id: req.params.id },
+      data: { mfaEnabled: true },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

@@ -908,7 +908,7 @@ function UsersManagement() {
   const [editUser, setEditUser] = useState(null)
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState({ email: '', password: '', name: '', role: 'user' })
-  const [mfaSetup, setMfaSetup] = useState(null) // { qr, secret }
+  const [mfaSetup, setMfaSetup] = useState(null) // { userId, qr, secret }
   const [mfaCode, setMfaCode] = useState('')
   const [mfaLoading, setMfaLoading] = useState(false)
 
@@ -957,11 +957,11 @@ function UsersManagement() {
     onError: () => toast.error('שגיאה בביטול MFA'),
   })
 
-  const startMfaSetup = async () => {
+  const startMfaSetup = async (userId) => {
     setMfaLoading(true)
     try {
-      const { data } = await api.post('/auth/mfa/setup')
-      setMfaSetup(data)
+      const { data } = await api.post(`/settings/users/${userId}/mfa-setup`)
+      setMfaSetup({ userId, ...data })
       setMfaCode('')
     } catch {
       toast.error('שגיאה ביצירת הגדרת MFA')
@@ -971,9 +971,10 @@ function UsersManagement() {
   }
 
   const verifyMfa = async () => {
+    if (!mfaSetup?.userId) return
     setMfaLoading(true)
     try {
-      await api.post('/auth/mfa/verify', { code: mfaCode })
+      await api.post(`/settings/users/${mfaSetup.userId}/mfa-verify`, { code: mfaCode })
       toast.success('אימות דו-שלבי הופעל בהצלחה!')
       setMfaSetup(null)
       setMfaCode('')
@@ -982,16 +983,6 @@ function UsersManagement() {
       toast.error(err.response?.data?.error || 'קוד שגוי')
     } finally {
       setMfaLoading(false)
-    }
-  }
-
-  const disableMfa = async () => {
-    try {
-      await api.post('/auth/mfa/disable')
-      toast.success('אימות דו-שלבי בוטל')
-      queryClient.invalidateQueries({ queryKey: ['settings-users'] })
-    } catch {
-      toast.error('שגיאה בביטול MFA')
     }
   }
 
@@ -1015,91 +1006,8 @@ function UsersManagement() {
 
   if (isLoading) return <p className="text-text-tertiary text-sm py-4">טוען...</p>
 
-  // Get current user from localStorage
-  const currentUser = (() => {
-    try { return JSON.parse(localStorage.getItem('laptrack_user')) } catch { return null }
-  })()
-  const currentUserData = users.find(u => u.id === currentUser?.id)
-
   return (
     <div className="space-y-4">
-      {/* MFA Setup for current user */}
-      <div className="bg-surface border border-border rounded-lg p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-bold text-text-primary">אימות דו-שלבי (MFA)</h2>
-          </div>
-          {currentUserData?.mfaEnabled ? (
-            <span className="flex items-center gap-1 text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-              <CheckCircle2 className="w-3 h-3" /> מופעל
-            </span>
-          ) : (
-            <span className="text-xs font-semibold text-text-tertiary bg-gray-100 px-2 py-0.5 rounded-full">כבוי</span>
-          )}
-        </div>
-        <p className="text-xs text-text-tertiary">הוסף שכבת אבטחה נוספת לחשבון שלך באמצעות Google Authenticator</p>
-
-        {mfaSetup ? (
-          <div className="space-y-3 border border-accent/30 rounded-sm p-4 bg-accent-soft/10">
-            <p className="text-xs font-semibold text-text-primary">סרוק את הברקוד באפליקציית Google Authenticator:</p>
-            <div className="flex justify-center">
-              <img src={mfaSetup.qr} alt="QR Code" className="w-48 h-48" />
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-text-tertiary mb-1">או הזן ידנית:</p>
-              <code className="text-xs bg-bg px-2 py-1 rounded select-all font-mono" dir="ltr">{mfaSetup.secret}</code>
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary block mb-1">הזן קוד אימות מהאפליקציה:</label>
-              <input
-                type="text"
-                value={mfaCode}
-                onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                maxLength={6}
-                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-center tracking-[0.3em] font-mono focus:outline-none focus:border-accent"
-                dir="ltr"
-                placeholder="000000"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => { setMfaSetup(null); setMfaCode('') }} className="px-3 py-1.5 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
-                ביטול
-              </button>
-              <button
-                onClick={verifyMfa}
-                disabled={mfaCode.length !== 6 || mfaLoading}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
-              >
-                <Shield className="w-3.5 h-3.5" />
-                {mfaLoading ? 'מאמת...' : 'הפעל MFA'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            {currentUserData?.mfaEnabled ? (
-              <button
-                onClick={() => { if (confirm('האם אתה בטוח שברצונך לבטל אימות דו-שלבי?')) disableMfa() }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-red-300 text-red-600 rounded-sm hover:bg-red-50 transition-all"
-              >
-                <ShieldOff className="w-3.5 h-3.5" />
-                בטל MFA
-              </button>
-            ) : (
-              <button
-                onClick={startMfaSetup}
-                disabled={mfaLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
-              >
-                <Shield className="w-3.5 h-3.5" />
-                {mfaLoading ? 'טוען...' : 'הגדר MFA'}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-text-primary">ניהול משתמשים</h2>
         <button onClick={startNew} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all">
@@ -1111,44 +1019,94 @@ function UsersManagement() {
       {/* Users list */}
       <div className="border border-border rounded-sm divide-y divide-border">
         {users.map(user => (
-          <div key={user.id} className="px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div>
-                <span className="text-sm font-semibold text-text-primary">{user.name}</span>
-                <span className="text-xs text-text-tertiary mr-2">{user.email}</span>
-              </div>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-gray-100 text-gray-600'}`}>
-                {user.role === 'admin' ? 'מנהל' : 'משתמש'}
-              </span>
-              {user.mfaEnabled ? (
-                <span className="flex items-center gap-1 text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                  <Shield className="w-3 h-3" /> MFA
+          <div key={user.id} className="px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div>
+                  <span className="text-sm font-semibold text-text-primary">{user.name}</span>
+                  <span className="text-xs text-text-tertiary mr-2">{user.email}</span>
+                </div>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-gray-100 text-gray-600'}`}>
+                  {user.role === 'admin' ? 'מנהל' : 'משתמש'}
                 </span>
-              ) : (
-                <span className="text-xs text-text-tertiary bg-gray-50 px-2 py-0.5 rounded-full">ללא MFA</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {user.mfaEnabled && (
-                <button
-                  onClick={() => { if (confirm(`לבטל MFA למשתמש ${user.name}?`)) mfaResetMutation.mutate(user.id) }}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-orange-500 hover:text-orange-500 transition-all"
-                  title="בטל MFA"
-                >
-                  <ShieldOff className="w-3 h-3" />
+                {user.mfaEnabled ? (
+                  <span className="flex items-center gap-1 text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                    <Shield className="w-3 h-3" /> MFA מופעל
+                  </span>
+                ) : (
+                  <span className="text-xs text-text-tertiary bg-gray-50 px-2 py-0.5 rounded-full">ללא MFA</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {user.mfaEnabled ? (
+                  <button
+                    onClick={() => { if (confirm(`לבטל MFA למשתמש ${user.name}?`)) mfaResetMutation.mutate(user.id) }}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-red-300 text-red-600 rounded-sm hover:bg-red-50 transition-all"
+                    title="בטל MFA"
+                  >
+                    <ShieldOff className="w-3 h-3" /> בטל MFA
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => startMfaSetup(user.id)}
+                    disabled={mfaLoading && mfaSetup?.userId === user.id}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                    title="הפעל MFA"
+                  >
+                    <Shield className="w-3 h-3" /> הפעל MFA
+                  </button>
+                )}
+                <button onClick={() => startEdit(user)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                  <Pencil className="w-3 h-3" />
+                  עריכה
                 </button>
-              )}
-              <button onClick={() => startEdit(user)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
-                <Pencil className="w-3 h-3" />
-                עריכה
-              </button>
-              <button
-                onClick={() => { if (confirm('למחוק משתמש זה?')) deleteMutation.mutate(user.id) }}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-red-500 hover:text-red-500 transition-all"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
+                <button
+                  onClick={() => { if (confirm('למחוק משתמש זה?')) deleteMutation.mutate(user.id) }}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-red-500 hover:text-red-500 transition-all"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             </div>
+
+            {/* MFA Setup inline for this user */}
+            {mfaSetup?.userId === user.id && (
+              <div className="space-y-3 border border-accent/30 rounded-sm p-4 bg-accent-soft/10">
+                <p className="text-xs font-semibold text-text-primary">סרוק את הברקוד באפליקציית Google Authenticator עבור {user.name}:</p>
+                <div className="flex justify-center">
+                  <img src={mfaSetup.qr} alt="QR Code" className="w-48 h-48" />
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-text-tertiary mb-1">או הזן ידנית:</p>
+                  <code className="text-xs bg-bg px-2 py-1 rounded select-all font-mono" dir="ltr">{mfaSetup.secret}</code>
+                </div>
+                <div>
+                  <label className="text-xs text-text-secondary block mb-1">הזן קוד אימות מהאפליקציה:</label>
+                  <input
+                    type="text"
+                    value={mfaCode}
+                    onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    maxLength={6}
+                    className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-center tracking-[0.3em] font-mono focus:outline-none focus:border-accent"
+                    dir="ltr"
+                    placeholder="000000"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setMfaSetup(null); setMfaCode('') }} className="px-3 py-1.5 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                    ביטול
+                  </button>
+                  <button
+                    onClick={verifyMfa}
+                    disabled={mfaCode.length !== 6 || mfaLoading}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    {mfaLoading ? 'מאמת...' : 'הפעל MFA'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
