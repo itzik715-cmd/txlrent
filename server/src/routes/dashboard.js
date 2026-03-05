@@ -58,6 +58,25 @@ router.get('/summary', async (req, res, next) => {
       take: 50,
     });
 
+    // Client responses (recent answered + pending)
+    const clientResponses = await prisma.rentalResponse.findMany({
+      where: { answered: true },
+      orderBy: { answeredAt: 'desc' },
+      take: 20,
+      include: {
+        rental: { include: { client: true, computer: true } },
+      },
+    });
+
+    const pendingAlerts = await prisma.rentalResponse.findMany({
+      where: { answered: false },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: {
+        rental: { include: { client: true, computer: true } },
+      },
+    });
+
     // Recent activity (last 10 rentals + last 10 payments, merged)
     const [recentRentals, recentPayments] = await Promise.all([
       prisma.rental.findMany({
@@ -106,6 +125,26 @@ router.get('/summary', async (req, res, next) => {
         clientId: b.rental.clientId,
       })),
       recentActivity,
+      clientResponses: clientResponses.map(r => ({
+        id: r.id,
+        choice: r.choice,
+        answeredAt: r.answeredAt,
+        createdAt: r.createdAt,
+        clientName: r.rental.client.name,
+        clientPhone: r.rental.client.phone,
+        clientId: r.rental.clientId,
+        computerInternalId: r.rental.computer.internalId,
+        rentalId: r.rentalId,
+      })),
+      pendingAlerts: pendingAlerts.map(r => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        clientName: r.rental.client.name,
+        clientPhone: r.rental.client.phone,
+        clientId: r.rental.clientId,
+        computerInternalId: r.rental.computer.internalId,
+        rentalId: r.rentalId,
+      })),
     });
   } catch (err) {
     next(err);

@@ -11,6 +11,11 @@ import {
   RotateCcw,
   CreditCard,
   Calendar,
+  MessageCircle,
+  Clock,
+  CheckCircle2,
+  Truck,
+  RefreshCw,
 } from 'lucide-react'
 import api from '../lib/api'
 import StatusBadge from '../components/shared/StatusBadge'
@@ -85,7 +90,90 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Row 2: Today's Returns */}
+      {/* Row 2: Client Responses & Pending Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Client Responses */}
+        <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-green-600" />
+            <h2 className="text-sm font-bold text-text-primary">תגובות לקוחות</h2>
+            {data.clientResponses?.length > 0 && (
+              <span className="text-xs font-bold text-white bg-green-600 rounded-full px-2 py-0.5">{data.clientResponses.length}</span>
+            )}
+          </div>
+          <div className="p-5 max-h-[350px] overflow-y-auto">
+            {data.clientResponses && data.clientResponses.length > 0 ? (
+              <div className="space-y-2">
+                {data.clientResponses.map((item) => {
+                  const choiceMap = {
+                    renew: { label: 'חידוש', icon: <RefreshCw className="w-3.5 h-3.5" />, bg: 'bg-green-soft', color: 'text-green-status' },
+                    return_pickup: { label: 'החזרה לנקודת איסוף', icon: <CheckCircle2 className="w-3.5 h-3.5" />, bg: 'bg-accent-soft', color: 'text-accent' },
+                    return_courier: { label: 'שליח לאיסוף', icon: <Truck className="w-3.5 h-3.5" />, bg: 'bg-orange-soft', color: 'text-orange-status' },
+                  }
+                  const c = choiceMap[item.choice] || { label: item.choice, icon: <MessageCircle className="w-3.5 h-3.5" />, bg: 'bg-gray-100', color: 'text-gray-600' }
+                  return (
+                    <div key={item.id} className="flex items-center justify-between py-2.5 px-3 border border-border rounded-sm hover:bg-accent-soft/20 transition-all cursor-pointer" onClick={() => navigate(`/rentals?detail=${item.rentalId}`)}>
+                      <div className="flex items-center gap-3">
+                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${c.bg} ${c.color}`}>
+                          {c.icon}
+                          {c.label}
+                        </div>
+                        <div>
+                          <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
+                          <span className="text-xs text-text-tertiary mr-2">{item.computerInternalId}</span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-text-tertiary">{formatDate(item.answeredAt)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-text-tertiary text-sm py-4">אין תגובות עדיין</p>
+            )}
+          </div>
+        </div>
+
+        {/* Pending Alerts (sent but not answered) */}
+        <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <Clock className="w-4 h-4 text-orange-status" />
+            <h2 className="text-sm font-bold text-text-primary">ממתינים לתגובה</h2>
+            {data.pendingAlerts?.length > 0 && (
+              <span className="text-xs font-bold text-white bg-orange-status rounded-full px-2 py-0.5">{data.pendingAlerts.length}</span>
+            )}
+          </div>
+          <div className="p-5 max-h-[350px] overflow-y-auto">
+            {data.pendingAlerts && data.pendingAlerts.length > 0 ? (
+              <div className="space-y-2">
+                {data.pendingAlerts.map((item) => {
+                  const sentAgo = Math.floor((Date.now() - new Date(item.createdAt)) / (1000 * 60 * 60 * 24))
+                  return (
+                    <div key={item.id} className="flex items-center justify-between py-2.5 px-3 border border-border rounded-sm hover:bg-accent-soft/20 transition-all cursor-pointer" onClick={() => navigate(`/rentals?detail=${item.rentalId}`)}>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">{item.computerInternalId}</span>
+                        <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-tertiary">
+                          {sentAgo === 0 ? 'נשלח היום' : `לפני ${sentAgo} ימים`}
+                        </span>
+                        <a href={`tel:${item.clientPhone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                          <Phone className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-text-tertiary text-sm py-4">אין התראות ממתינות</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Today's Returns */}
       <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
           <Calendar className="w-4 h-4 text-accent" />
