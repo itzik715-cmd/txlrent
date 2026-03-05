@@ -209,7 +209,7 @@ export default function Billing() {
                 {clients.map((c) => (
                   <option key={c._id || c.id} value={c._id || c.id}>
                     {c.name}
-                    {c.balance > 0 ? ` (חוב: ${Number(c.balance).toLocaleString('he-IL')} \u20AA)` : ''}
+                    {c.outstandingBalance > 0 || c.balance > 0 ? ` (חוב: ${Number(c.outstandingBalance || c.balance).toLocaleString('he-IL')} ₪)` : ''}
                   </option>
                 ))}
               </select>

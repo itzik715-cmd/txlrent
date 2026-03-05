@@ -51,7 +51,7 @@ router.get('/', async (req, res, next) => {
       prisma.computer.count({ where }),
     ]);
 
-    res.json({ data: computers, total, page: parseInt(page), limit: parseInt(limit) });
+    res.json(computers);
   } catch (err) {
     next(err);
   }

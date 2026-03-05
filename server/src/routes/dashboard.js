@@ -80,10 +80,31 @@ router.get('/summary', async (req, res, next) => {
       .slice(0, 10);
 
     res.json({
-      stats: { available, rented, maintenance, total, monthlyRevenue },
-      todayReturns,
-      weekReturns,
-      openDebts,
+      available,
+      rented,
+      maintenance,
+      total,
+      monthlyRevenue,
+      todayReturns: todayReturns.map(r => ({
+        clientName: r.client.name,
+        computerInternalId: r.computer.internalId,
+        computerId: r.computerId,
+        status: r.status,
+        expectedReturn: r.expectedReturn,
+      })),
+      weekReturns: weekReturns.map(r => ({
+        clientName: r.client.name,
+        computerInternalId: r.computer.internalId,
+        computerId: r.computerId,
+        status: r.status,
+        expectedReturn: r.expectedReturn,
+      })),
+      openDebts: openDebts.map(b => ({
+        clientName: b.rental.client.name,
+        amount: b.amount,
+        daysOverdue: Math.floor((Date.now() - new Date(b.dueDate)) / (1000 * 60 * 60 * 24)),
+        clientId: b.rental.clientId,
+      })),
       recentActivity,
     });
   } catch (err) {

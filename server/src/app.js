@@ -27,6 +27,8 @@ app.use('/api/computers', authMiddleware, computerRoutes);
 app.use('/api/clients', authMiddleware, clientRoutes);
 app.use('/api/rentals', authMiddleware, rentalRoutes);
 app.use('/api/billing', authMiddleware, billingRoutes);
+app.use('/api/billings', authMiddleware, billingRoutes);
+app.use('/api/payments', authMiddleware, billingRoutes);
 app.use('/api/import', authMiddleware, importRoutes);
 
 // Global error handler

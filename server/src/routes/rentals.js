@@ -26,7 +26,12 @@ router.get('/', async (req, res, next) => {
       prisma.rental.count({ where }),
     ]);
 
-    res.json({ data: rentals, total, page: parseInt(page), limit: parseInt(limit) });
+    const mapped = rentals.map(r => ({
+      ...r,
+      computerInternalId: r.computer?.internalId,
+      clientName: r.client?.name,
+    }));
+    res.json(mapped);
   } catch (err) {
     next(err);
   }

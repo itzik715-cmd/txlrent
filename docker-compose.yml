@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,8 +5,6 @@ services:
       POSTGRES_USER: laptrack
       POSTGRES_PASSWORD: laptrack_dev
       POSTGRES_DB: laptrack
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,8 +15,6 @@ services:
 
   backend:
     build: ./server
-    ports:
-      - "3001:3001"
     environment:
       DATABASE_URL: postgresql://laptrack:laptrack_dev@postgres:5432/laptrack
       JWT_SECRET: laptrack-prod-secret-k8s7d2m4
@@ -32,9 +27,14 @@ services:
   frontend:
     build: ./client
     ports:
-      - "3000:80"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ssl-certs:/etc/nginx/ssl
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  ssl-certs:

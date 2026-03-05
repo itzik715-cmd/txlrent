@@ -25,7 +25,7 @@ router.get('/', async (req, res, next) => {
         return sum + rental.billingCycles.reduce((s, bc) => s + bc.amount, 0);
       }, 0);
       const { rentals, ...clientData } = client;
-      return { ...clientData, outstandingBalance, activeRentals: rentals.filter(r => r.status === 'ACTIVE').length };
+      return { ...clientData, outstandingBalance, balance: outstandingBalance, contactPerson: clientData.contactName, activeRentals: rentals.filter(r => r.status === 'ACTIVE').length };
     });
 
     res.json(result);
@@ -79,6 +79,37 @@ router.put('/:id', async (req, res, next) => {
       data: { name, contactName, phone, email, address, notes },
     });
     res.json(client);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/clients/:id/rentals — client's rentals
+router.get('/:id/rentals', async (req, res, next) => {
+  try {
+    const rentals = await prisma.rental.findMany({
+      where: { clientId: req.params.id },
+      orderBy: { createdAt: 'desc' },
+      include: { computer: true, billingCycles: true },
+    });
+    const mapped = rentals.map(r => ({
+      ...r,
+      computerInternalId: r.computer?.internalId,
+    }));
+    res.json(mapped);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/clients/:id/payments — client's payments
+router.get('/:id/payments', async (req, res, next) => {
+  try {
+    const payments = await prisma.payment.findMany({
+      where: { clientId: req.params.id },
+      orderBy: { date: 'desc' },
+    });
+    res.json(payments);
   } catch (err) {
     next(err);
   }

@@ -52,7 +52,7 @@ export default function Clients() {
     if (!q) return true
     return (
       (c.name || '').toLowerCase().includes(q) ||
-      (c.contactPerson || '').toLowerCase().includes(q) ||
+      (c.contactPerson || c.contactName || '').toLowerCase().includes(q) ||
       (c.phone || '').includes(q) ||
       (c.email || '').toLowerCase().includes(q)
     )
@@ -68,7 +68,7 @@ export default function Clients() {
     setEditId(client._id || client.id)
     setForm({
       name: client.name || '',
-      contactPerson: client.contactPerson || '',
+      contactPerson: client.contactPerson || client.contactName || '',
       phone: client.phone || '',
       email: client.email || '',
       idNumber: client.idNumber || '',
@@ -87,7 +87,10 @@ export default function Clients() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    saveMutation.mutate(form)
+    saveMutation.mutate({
+      ...form,
+      contactName: form.contactPerson || form.contactName,
+    })
   }
 
   const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }))
@@ -290,7 +293,7 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit }) {
             rentals.map((r, i) => (
               <div key={i} className="flex items-center justify-between p-3 bg-bg rounded-sm">
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold">{r.computerInternalId || r.computerId}</span>
+                  <span className="text-sm font-semibold">{r.computerInternalId || r.computer?.internalId || r.computerId}</span>
                   <span className="text-xs text-text-tertiary">
                     {new Date(r.startDate).toLocaleDateString('he-IL')}
                   </span>
