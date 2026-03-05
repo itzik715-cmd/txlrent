@@ -47,8 +47,10 @@ export default function Dashboard() {
   const [resendLoading, setResendLoading] = useState(false)
   const [debtReminder, setDebtReminder] = useState(null)
   const [debtMessage, setDebtMessage] = useState('')
-  const [handlePreview, setHandlePreview] = useState(null) // { item, message }
+  const [handlePreview, setHandlePreview] = useState(null)
   const [handleMessage, setHandleMessage] = useState('')
+  const [renewDate, setRenewDate] = useState('')
+  const [renewMonthly, setRenewMonthly] = useState(false)
 
   const { data: settings = {} } = useQuery({
     queryKey: ['settings'],
@@ -56,30 +58,51 @@ export default function Dashboard() {
   })
 
   const handleMutation = useMutation({
-    mutationFn: (id) => api.patch(`/dashboard/responses/${id}/handle`),
+    mutationFn: ({ id, newExpectedReturn, recurring }) =>
+      api.patch(`/dashboard/responses/${id}/handle`, { newExpectedReturn, recurring }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      queryClient.invalidateQueries({ queryKey: ['rentals'] })
       toast.success('סומן כטופל')
     },
   })
 
   const defaultResponseTemplates = {
-    renew: `שלום {clientName},\nתודה על בחירתך לחדש את השכרת המחשב {computerId} ({computerName}).\nההשכרה חודשה בהצלחה לתקופה נוספת.\n\nבברכה, {senderName}`,
+    renew: `שלום {clientName},\nתודה על בחירתך לחדש את השכרת המחשב {computerId} ({computerName}).\nההשכרה חודשה בהצלחה{renewInfo}.\n\nבברכה, {senderName}`,
     return_pickup: `שלום {clientName},\nתודה על פנייתך. קיבלנו את בקשתך להחזיר את מחשב {computerId} ({computerName}) לאחת מנקודות האיסוף.\n\nניתן להחזיר בשעות 09:00-17:00.\nבברכה, {senderName}`,
     return_courier: `שלום {clientName},\nתודה על פנייתך. קיבלנו את בקשתך להזמנת שליח לאיסוף מחשב {computerId} ({computerName}).\n\nעלות האיסוף: 50 ₪\nניצור איתך קשר בהקדם לתיאום מועד האיסוף.\n\nבברכה, {senderName}`,
   }
 
-  const openHandlePreview = (item) => {
+  const buildRenewInfo = (date, monthly) => {
+    if (monthly) return ' להשכרה חודשית מתחדשת'
+    if (date) return ` עד תאריך ${new Date(date).toLocaleDateString('he-IL')}`
+    return ' לתקופה נוספת'
+  }
+
+  const buildHandleMessage = (item, date, monthly) => {
     const templateKey = `response_template_${item.choice}`
     const rawTemplate = settings[templateKey] || defaultResponseTemplates[item.choice] || ''
     const senderName = settings.wa_sender_name || 'LapTrack'
-    const message = rawTemplate
+    return rawTemplate
       .replace(/\{clientName\}/g, item.clientName || '')
       .replace(/\{computerId\}/g, item.computerInternalId || '')
       .replace(/\{computerName\}/g, item.computerName || '')
       .replace(/\{senderName\}/g, senderName)
+      .replace(/\{renewInfo\}/g, item.choice === 'renew' ? buildRenewInfo(date, monthly) : '')
+      .replace(/\{newDate\}/g, date ? new Date(date).toLocaleDateString('he-IL') : 'חודשי מתחדש')
+  }
+
+  const openHandlePreview = (item) => {
+    setRenewDate('')
+    setRenewMonthly(false)
+    const message = buildHandleMessage(item, '', false)
     setHandleMessage(message)
     setHandlePreview(item)
+  }
+
+  const updateRenewMessage = (item, date, monthly) => {
+    const message = buildHandleMessage(item, date, monthly)
+    setHandleMessage(message)
   }
 
   const sendCustomMutation = useMutation({
@@ -461,6 +484,57 @@ export default function Dashboard() {
                 {handlePreview.choice === 'renew' ? 'חידוש' : handlePreview.choice === 'return_pickup' ? 'החזרה לנקודת איסוף' : 'שליח לאיסוף'}
               </span>
             </div>
+
+            {/* Renewal options - date picker + monthly */}
+            {handlePreview.choice === 'renew' && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+                <h4 className="text-xs font-bold text-green-700">חידוש השכרה — עד מתי?</h4>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="renewType"
+                      checked={!renewMonthly}
+                      onChange={() => {
+                        setRenewMonthly(false)
+                        updateRenewMessage(handlePreview, renewDate, false)
+                      }}
+                      className="accent-green-600"
+                    />
+                    <span className="text-xs font-medium text-text-primary">תאריך סיום</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={renewDate}
+                    onChange={(e) => {
+                      setRenewDate(e.target.value)
+                      setRenewMonthly(false)
+                      updateRenewMessage(handlePreview, e.target.value, false)
+                    }}
+                    disabled={renewMonthly}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="px-2 py-1 text-xs border border-border rounded-sm bg-white focus:outline-none focus:border-accent disabled:opacity-40"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="renewType"
+                      checked={renewMonthly}
+                      onChange={() => {
+                        setRenewMonthly(true)
+                        setRenewDate('')
+                        updateRenewMessage(handlePreview, '', true)
+                      }}
+                      className="accent-green-600"
+                    />
+                    <span className="text-xs font-medium text-text-primary">חודשי מתחדש (ללא תאריך סיום)</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
             <textarea
               value={handleMessage}
               onChange={(e) => setHandleMessage(e.target.value)}
@@ -471,7 +545,7 @@ export default function Dashboard() {
             <div className="flex gap-2 justify-between">
               <button
                 onClick={() => {
-                  handleMutation.mutate(handlePreview.id)
+                  handleMutation.mutate({ id: handlePreview.id, newExpectedReturn: renewDate || undefined, recurring: renewMonthly || undefined })
                   setHandlePreview(null)
                   setHandleMessage('')
                 }}
@@ -493,7 +567,7 @@ export default function Dashboard() {
                         .then((res) => {
                           if (res.data.sent) {
                             toast.success('אימייל נשלח')
-                            handleMutation.mutate(handlePreview.id)
+                            handleMutation.mutate({ id: handlePreview.id, newExpectedReturn: renewDate || undefined, recurring: renewMonthly || undefined })
                             setHandlePreview(null)
                             setHandleMessage('')
                           } else toast.error(res.data.reason || 'שליחת אימייל נכשלה')
@@ -511,7 +585,7 @@ export default function Dashboard() {
                   <button
                     onClick={() => {
                       sendCustomMutation.mutate({ phone: handlePreview.clientPhone, message: handleMessage, clientId: handlePreview.clientId })
-                      handleMutation.mutate(handlePreview.id)
+                      handleMutation.mutate({ id: handlePreview.id, newExpectedReturn: renewDate || undefined, recurring: renewMonthly || undefined })
                       setHandlePreview(null)
                       setHandleMessage('')
                     }}

@@ -336,7 +336,7 @@ function TemplatesConfig({ settings }) {
   const defaultResponseTemplates = {
     renew: `שלום {clientName},
 תודה על בחירתך לחדש את השכרת המחשב {computerId} ({computerName}).
-ההשכרה חודשה בהצלחה לתקופה נוספת.
+ההשכרה חודשה בהצלחה{renewInfo}.
 
 בברכה, {senderName}`,
     return_pickup: `שלום {clientName},
@@ -379,10 +379,13 @@ function TemplatesConfig({ settings }) {
     .replace(/\{expectedReturn\}/g, '08/03/2026')
     .replace(/\{senderName\}/g, settings.wa_sender_name || 'LapTrack')
     .replace(/\{responseUrl\}/g, 'https://rent.txlcomp.co.il/r/abc123')
+    .replace(/\{renewInfo\}/g, ' עד תאריך 08/04/2026')
+    .replace(/\{newDate\}/g, '08/04/2026')
 
-  const responseVarsNote = (
+  const responseVarsNote = (isRenew) => (
     <p className="text-xs text-text-tertiary">
       משתנים זמינים: <code className="bg-bg px-1 rounded">{'{clientName}'}</code> <code className="bg-bg px-1 rounded">{'{computerId}'}</code> <code className="bg-bg px-1 rounded">{'{computerName}'}</code> <code className="bg-bg px-1 rounded">{'{senderName}'}</code>
+      {isRenew && <> <code className="bg-bg px-1 rounded">{'{renewInfo}'}</code> <code className="bg-bg px-1 rounded">{'{newDate}'}</code></>}
     </p>
   )
 
@@ -433,7 +436,7 @@ function TemplatesConfig({ settings }) {
         {/* Renew */}
         <div className="space-y-2 border-b border-border pb-4">
           <h3 className="text-xs font-bold text-green-600 flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> חידוש לתקופה נוספת</h3>
-          {responseVarsNote}
+          {responseVarsNote(true)}
           <textarea value={renewTemplate} onChange={e => setRenewTemplate(e.target.value)} rows={6} className={inputClass + " resize-y font-mono text-xs leading-relaxed"} dir="rtl" />
           <div>
             <h4 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h4>
@@ -444,7 +447,7 @@ function TemplatesConfig({ settings }) {
         {/* Return pickup */}
         <div className="space-y-2 border-b border-border pb-4">
           <h3 className="text-xs font-bold text-blue-600 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> החזרה לנקודת איסוף</h3>
-          {responseVarsNote}
+          {responseVarsNote(false)}
           <textarea value={pickupTemplate} onChange={e => setPickupTemplate(e.target.value)} rows={6} className={inputClass + " resize-y font-mono text-xs leading-relaxed"} dir="rtl" />
           <div>
             <h4 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h4>
@@ -455,7 +458,7 @@ function TemplatesConfig({ settings }) {
         {/* Return courier */}
         <div className="space-y-2 pb-2">
           <h3 className="text-xs font-bold text-orange-600 flex items-center gap-1.5"><Send className="w-3.5 h-3.5" /> שליח לאיסוף</h3>
-          {responseVarsNote}
+          {responseVarsNote(false)}
           <textarea value={courierTemplate} onChange={e => setCourierTemplate(e.target.value)} rows={6} className={inputClass + " resize-y font-mono text-xs leading-relaxed"} dir="rtl" />
           <div>
             <h4 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h4>

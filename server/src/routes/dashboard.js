@@ -158,8 +158,33 @@ router.get('/summary', async (req, res, next) => {
 });
 
 // PATCH /api/dashboard/responses/:id/handle — mark response as handled
+// For renewals: optionally update rental expectedReturn and recurring
 router.patch('/responses/:id/handle', async (req, res, next) => {
   try {
+    const { newExpectedReturn, recurring } = req.body || {};
+
+    const response = await prisma.rentalResponse.findUnique({
+      where: { id: req.params.id },
+      include: { rental: true },
+    });
+    if (!response) return res.status(404).json({ error: 'תגובה לא נמצאה' });
+
+    // If renewal with new date, update the rental
+    if (response.choice === 'renew' && (newExpectedReturn || recurring)) {
+      const rentalUpdate = {};
+      if (recurring) {
+        rentalUpdate.recurring = true;
+        rentalUpdate.expectedReturn = null;
+      } else if (newExpectedReturn) {
+        rentalUpdate.expectedReturn = new Date(newExpectedReturn);
+        rentalUpdate.recurring = false;
+      }
+      await prisma.rental.update({
+        where: { id: response.rentalId },
+        data: rentalUpdate,
+      });
+    }
+
     const updated = await prisma.rentalResponse.update({
       where: { id: req.params.id },
       data: { handled: true, handledAt: new Date() },
