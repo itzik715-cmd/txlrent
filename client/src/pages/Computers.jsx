@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw } from 'lucide-react'
+import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -282,6 +282,51 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
   })
 
   const [activeTab, setActiveTab] = useState('info')
+  const [showClone, setShowClone] = useState(false)
+  const [cloneCount, setCloneCount] = useState(1)
+  const [showNewIssue, setShowNewIssue] = useState(false)
+  const [issueDesc, setIssueDesc] = useState('')
+  const [resolveText, setResolveText] = useState({})
+
+  const cloneMutation = useMutation({
+    mutationFn: (data) => api.post(`/computers/${computerId}/clone`, data).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      toast.success(`${data.count} מחשבים נוצרו בהצלחה`)
+      setShowClone(false)
+      setCloneCount(1)
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשכפול'),
+  })
+
+  const addIssueMutation = useMutation({
+    mutationFn: (data) => api.post('/issues', data).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computer-detail', computerId] })
+      toast.success('תקלה נוספה')
+      setShowNewIssue(false)
+      setIssueDesc('')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
+
+  const resolveIssueMutation = useMutation({
+    mutationFn: ({ id, resolution }) => api.put(`/issues/${id}`, { status: 'RESOLVED', resolution }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computer-detail', computerId] })
+      toast.success('התקלה נסגרה')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
+
+  const reopenIssueMutation = useMutation({
+    mutationFn: (id) => api.put(`/issues/${id}`, { status: 'OPEN' }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computer-detail', computerId] })
+      toast.success('התקלה נפתחה מחדש')
+    },
+  })
 
   const archiveMutation = useMutation({
     mutationFn: () => api.put(`/computers/${computerId}/archive`),
@@ -345,9 +390,13 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
   }, 0)
   const totalRentals = rentals.length
 
+  const issues = computer.issues || []
+  const openIssues = issues.filter(i => i.status === 'OPEN').length
+
   const tabs = [
     { key: 'info', label: 'פרטים' },
     { key: 'history', label: `היסטוריה (${totalRentals})` },
+    { key: 'issues', label: `תקלות (${issues.length})${openIssues > 0 ? ' !' : ''}` },
   ]
 
   return (
@@ -441,6 +490,13 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
                 >
                   <Pencil className="w-3.5 h-3.5" />
                   עריכה
+                </button>
+                <button
+                  onClick={() => setShowClone(!showClone)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  שכפל
                 </button>
                 <button
                   onClick={() => {
@@ -549,6 +605,130 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
           ) : (
             <p className="text-text-tertiary text-sm text-center py-6">אין היסטוריית השכרות למחשב זה</p>
           )}
+        </div>
+      )}
+
+      {/* Issues Tab */}
+      {activeTab === 'issues' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-semibold text-text-secondary">
+              {openIssues > 0 ? `${openIssues} תקלות פתוחות` : 'אין תקלות פתוחות'}
+            </span>
+            <button
+              onClick={() => setShowNewIssue(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150"
+            >
+              <Plus className="w-3 h-3" />
+              דווח תקלה
+            </button>
+          </div>
+
+          {showNewIssue && (
+            <div className="bg-bg border border-border rounded-sm p-3 space-y-2">
+              <textarea
+                value={issueDesc}
+                onChange={(e) => setIssueDesc(e.target.value)}
+                placeholder="תיאור התקלה..."
+                rows={2}
+                className="w-full px-3 py-2 bg-surface border border-border rounded-sm text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-all duration-150 resize-none"
+              />
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => { setShowNewIssue(false); setIssueDesc('') }} className="px-3 py-1.5 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150">ביטול</button>
+                <button
+                  onClick={() => { if (issueDesc.trim()) addIssueMutation.mutate({ computerId, description: issueDesc.trim() }) }}
+                  disabled={!issueDesc.trim() || addIssueMutation.isPending}
+                  className="px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  {addIssueMutation.isPending ? 'שומר...' : 'שמור'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {issues.length > 0 ? (
+            <div className="space-y-2">
+              {issues.map((issue) => (
+                <div key={issue.id} className={`rounded-sm border p-3 ${issue.status === 'OPEN' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 flex-1">
+                      {issue.status === 'OPEN' ? (
+                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm text-text-primary">{issue.description}</p>
+                        {issue.resolution && (
+                          <p className="text-xs text-green-700 mt-1">פתרון: {issue.resolution}</p>
+                        )}
+                        <p className="text-xs text-text-tertiary mt-1">
+                          {new Date(issue.createdAt).toLocaleDateString('he-IL')}
+                          {issue.resolvedAt && ` — נסגר ${new Date(issue.resolvedAt).toLocaleDateString('he-IL')}`}
+                        </p>
+                      </div>
+                    </div>
+                    {issue.status === 'OPEN' ? (
+                      <div className="flex flex-col gap-1 flex-shrink-0">
+                        <input
+                          type="text"
+                          placeholder="פתרון..."
+                          value={resolveText[issue.id] || ''}
+                          onChange={(e) => setResolveText(p => ({ ...p, [issue.id]: e.target.value }))}
+                          className="px-2 py-1 text-xs border border-border rounded-sm bg-white w-32 focus:outline-none focus:border-accent"
+                        />
+                        <button
+                          onClick={() => resolveIssueMutation.mutate({ id: issue.id, resolution: resolveText[issue.id] || '' })}
+                          className="px-2 py-1 text-xs font-medium bg-green-600 text-white rounded-sm hover:opacity-90"
+                        >
+                          סגור תקלה
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => reopenIssueMutation.mutate(issue.id)}
+                        className="px-2 py-1 text-xs font-medium text-orange-600 border border-orange-300 rounded-sm hover:bg-orange-50"
+                      >
+                        פתח מחדש
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-text-tertiary text-sm text-center py-6">אין היסטוריית תקלות למחשב זה</p>
+          )}
+        </div>
+      )}
+
+      {/* Clone Panel */}
+      {showClone && (
+        <div className="border border-green-300 rounded-sm p-3 mt-4 bg-green-50 space-y-3">
+          <p className="text-xs font-semibold text-text-secondary">
+            שכפל את {computer.internalId} ({computer.brand} {computer.model})
+          </p>
+          <div className="flex items-center gap-3">
+            <label className="text-xs text-text-secondary">כמות:</label>
+            <input
+              type="number"
+              value={cloneCount}
+              onChange={(e) => setCloneCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+              min="1"
+              max="100"
+              className="w-20 px-2 py-1.5 text-sm border border-border rounded-sm bg-white text-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowClone(false)} className="px-3 py-1.5 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150">ביטול</button>
+            <button
+              onClick={() => cloneMutation.mutate({ count: cloneCount })}
+              disabled={cloneMutation.isPending}
+              className="px-3 py-1.5 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+            >
+              {cloneMutation.isPending ? 'משכפל...' : `שכפל ${cloneCount} מחשבים`}
+            </button>
+          </div>
         </div>
       )}
     </Modal>

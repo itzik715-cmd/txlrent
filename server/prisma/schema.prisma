@@ -30,6 +30,23 @@ model Computer {
   qrCode       String?
   createdAt    DateTime       @default(now())
   rentals      Rental[]
+  issues       Issue[]
+}
+
+model Issue {
+  id          String      @id @default(cuid())
+  computer    Computer    @relation(fields: [computerId], references: [id])
+  computerId  String
+  description String
+  resolution  String?
+  status      IssueStatus @default(OPEN)
+  createdAt   DateTime    @default(now())
+  resolvedAt  DateTime?
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
 }
 
 enum ComputerStatus {
@@ -62,8 +79,9 @@ model Rental {
   client         Client         @relation(fields: [clientId], references: [id])
   clientId       String
   startDate      DateTime
-  expectedReturn DateTime
+  expectedReturn DateTime?
   actualReturn   DateTime?
+  recurring      Boolean        @default(false)
   priceMonthly   Float
   status         RentalStatus   @default(ACTIVE)
   notes          String?

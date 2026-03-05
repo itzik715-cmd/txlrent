@@ -85,10 +85,13 @@ router.get('/returns-week', async (req, res, next) => {
 // POST /api/rentals — create rental
 router.post('/', async (req, res, next) => {
   try {
-    const { computerId, clientId, startDate, expectedReturn, priceMonthly, notes } = req.body;
+    const { computerId, clientId, startDate, expectedReturn, priceMonthly, notes, recurring } = req.body;
 
-    if (!computerId || !clientId || !startDate || !expectedReturn || !priceMonthly) {
+    if (!computerId || !clientId || !startDate || !priceMonthly) {
       return res.status(400).json({ error: 'חסרים שדות חובה' });
+    }
+    if (!recurring && !expectedReturn) {
+      return res.status(400).json({ error: 'חסר תאריך החזרה צפוי (או סמן כהשכרה חודשית)' });
     }
 
     // Check computer is available
@@ -105,7 +108,8 @@ router.post('/', async (req, res, next) => {
           computerId,
           clientId,
           startDate: new Date(startDate),
-          expectedReturn: new Date(expectedReturn),
+          expectedReturn: expectedReturn ? new Date(expectedReturn) : null,
+          recurring: !!recurring,
           priceMonthly: parseFloat(priceMonthly),
           notes,
         },
@@ -145,13 +149,16 @@ router.post('/', async (req, res, next) => {
 // POST /api/rentals/bulk — create multiple rentals for one client
 router.post('/bulk', async (req, res, next) => {
   try {
-    const { computerIds, clientId, startDate, expectedReturn, priceMonthly, notes } = req.body;
+    const { computerIds, clientId, startDate, expectedReturn, priceMonthly, notes, recurring } = req.body;
 
     if (!computerIds || !Array.isArray(computerIds) || computerIds.length === 0) {
       return res.status(400).json({ error: 'יש לבחור לפחות מחשב אחד' });
     }
-    if (!clientId || !startDate || !expectedReturn || !priceMonthly) {
+    if (!clientId || !startDate || !priceMonthly) {
       return res.status(400).json({ error: 'חסרים שדות חובה' });
+    }
+    if (!recurring && !expectedReturn) {
+      return res.status(400).json({ error: 'חסר תאריך החזרה צפוי (או סמן כהשכרה חודשית)' });
     }
 
     // Verify all computers are available
@@ -178,7 +185,8 @@ router.post('/bulk', async (req, res, next) => {
             computerId: compId,
             clientId,
             startDate: new Date(startDate),
-            expectedReturn: new Date(expectedReturn),
+            expectedReturn: expectedReturn ? new Date(expectedReturn) : null,
+            recurring: !!recurring,
             priceMonthly: parseFloat(priceMonthly),
             notes,
           },
@@ -217,10 +225,11 @@ router.put('/:id', async (req, res, next) => {
     const rental = await prisma.rental.findUnique({ where: { id: req.params.id } });
     if (!rental) return res.status(404).json({ error: 'השכרה לא נמצאה' });
 
-    const { startDate, expectedReturn, priceMonthly, notes, computerId, clientId } = req.body;
+    const { startDate, expectedReturn, priceMonthly, notes, computerId, clientId, recurring } = req.body;
     const data = {};
     if (startDate) data.startDate = new Date(startDate);
-    if (expectedReturn) data.expectedReturn = new Date(expectedReturn);
+    if (expectedReturn !== undefined) data.expectedReturn = expectedReturn ? new Date(expectedReturn) : null;
+    if (recurring !== undefined) data.recurring = !!recurring;
     if (priceMonthly !== undefined) data.priceMonthly = parseFloat(priceMonthly);
     if (notes !== undefined) data.notes = notes;
     if (clientId) data.clientId = clientId;

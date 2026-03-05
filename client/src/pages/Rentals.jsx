@@ -101,7 +101,7 @@ export default function Rentals() {
     {
       key: 'expectedReturn',
       label: 'תאריך החזרה',
-      render: (val) => formatDate(val),
+      render: (val, row) => row.recurring ? <span className="text-xs font-medium text-accent">חודשי</span> : formatDate(val),
     },
     {
       key: 'priceMonthly',
@@ -302,6 +302,7 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
       notes: rental.notes || '',
       computerId: rental.computerId,
       clientId: rental.clientId,
+      recurring: rental.recurring || false,
     })
     setEditing(true)
   }
@@ -310,11 +311,12 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
     e.preventDefault()
     updateMutation.mutate({
       startDate: editForm.startDate,
-      expectedReturn: editForm.expectedReturn,
+      expectedReturn: editForm.recurring ? null : editForm.expectedReturn,
       priceMonthly: Number(editForm.priceMonthly),
       notes: editForm.notes,
       computerId: editForm.computerId,
       clientId: editForm.clientId,
+      recurring: editForm.recurring,
     })
   }
 
@@ -341,6 +343,9 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
       {/* Status bar */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <StatusBadge status={rental.status} />
+        {rental.recurring && (
+          <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">חודשי מתחדש</span>
+        )}
         <span className="text-xs text-text-secondary">{duration} ימים</span>
         <div className="flex items-center gap-1.5 text-xs text-text-secondary">
           <CreditCard className="w-3.5 h-3.5" />
@@ -393,15 +398,30 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Recurring toggle */}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editForm.recurring || false}
+                onChange={(e) => setEditForm(f => ({ ...f, recurring: e.target.checked }))}
+                className="w-4 h-4 rounded border-border text-accent focus:ring-accent"
+              />
+              <span className="text-xs font-medium text-text-secondary">חודשי מתחדש (ללא תאריך סיום)</span>
+            </label>
+          </div>
+
+          <div className={`grid gap-3 ${editForm.recurring ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">תאריך התחלה</label>
               <input type="date" value={editForm.startDate} onChange={(e) => setEditForm(f => ({ ...f, startDate: e.target.value }))} className={inputClass} />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">תאריך החזרה צפוי</label>
-              <input type="date" value={editForm.expectedReturn} onChange={(e) => setEditForm(f => ({ ...f, expectedReturn: e.target.value }))} className={inputClass} />
-            </div>
+            {!editForm.recurring && (
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">תאריך החזרה צפוי</label>
+                <input type="date" value={editForm.expectedReturn} onChange={(e) => setEditForm(f => ({ ...f, expectedReturn: e.target.value }))} className={inputClass} />
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1">מחיר חודשי</label>
@@ -424,7 +444,7 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
           {/* Details grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <InfoCell label="התחלה" value={formatDate(rental.startDate)} />
-            <InfoCell label="החזרה צפויה" value={formatDate(rental.expectedReturn)} />
+            <InfoCell label="החזרה צפויה" value={rental.recurring ? 'חודשי מתחדש' : formatDate(rental.expectedReturn)} />
             <InfoCell label="הוחזר בפועל" value={rental.actualReturn ? formatDate(rental.actualReturn) : 'טרם הוחזר'} />
             <InfoCell label="מחיר חודשי" value={formatCurrency(rental.priceMonthly)} />
           </div>
@@ -580,13 +600,15 @@ function NewRentalModal({ clients, availableComputers, onClose, onSuccess }) {
   const [priceMonthly, setPriceMonthly] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [compSearch, setCompSearch] = useState('')
+  const [recurring, setRecurring] = useState(false)
 
   const expectedReturn = useMemo(() => {
+    if (recurring) return ''
     if (!startDate || !days) return ''
     const d = new Date(startDate)
     d.setDate(d.getDate() + parseInt(days))
     return d.toISOString().split('T')[0]
-  }, [startDate, days])
+  }, [startDate, days, recurring])
 
   const filteredComputers = useMemo(() => {
     if (!compSearch) return availableComputers
@@ -638,8 +660,9 @@ function NewRentalModal({ clients, availableComputers, onClose, onSuccess }) {
       computerIds: Array.from(selectedIds),
       clientId,
       startDate,
-      expectedReturn,
+      expectedReturn: recurring ? null : expectedReturn,
       priceMonthly: Number(priceMonthly),
+      recurring,
     })
   }
 
@@ -658,23 +681,43 @@ function NewRentalModal({ clients, availableComputers, onClose, onSuccess }) {
           </select>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* Recurring toggle */}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={recurring}
+              onChange={(e) => setRecurring(e.target.checked)}
+              className="w-4 h-4 rounded border-border text-accent focus:ring-accent"
+            />
+            <span className="text-xs font-medium text-text-secondary">השכרה חודשית מתחדשת (ללא תאריך סיום)</span>
+          </label>
+        </div>
+
+        <div className={`grid gap-3 ${recurring ? 'grid-cols-2' : 'grid-cols-3'}`}>
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1">תאריך התחלה</label>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className={inputClass} />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1">מספר ימים</label>
-            <input type="number" value={days} onChange={(e) => setDays(e.target.value)} min="1" required className={inputClass} />
-          </div>
+          {!recurring && (
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">מספר ימים</label>
+              <input type="number" value={days} onChange={(e) => setDays(e.target.value)} min="1" required className={inputClass} />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1">מחיר חודשי</label>
             <input type="number" value={priceMonthly} onChange={(e) => setPriceMonthly(e.target.value)} min="1" required placeholder="250" className={inputClass} />
           </div>
         </div>
-        {expectedReturn && (
+        {expectedReturn && !recurring && (
           <p className="text-xs text-text-tertiary -mt-2">
             החזרה צפויה: <span className="font-semibold text-text-primary">{new Date(expectedReturn).toLocaleDateString('he-IL')}</span>
+          </p>
+        )}
+        {recurring && (
+          <p className="text-xs text-accent font-medium -mt-2">
+            השכרה חודשית מתחדשת — ללא תאריך החזרה קבוע
           </p>
         )}
 
@@ -739,7 +782,7 @@ function NewRentalModal({ clients, availableComputers, onClose, onSuccess }) {
           <div className="bg-accent-soft border border-accent/20 rounded-md p-3">
             <div className="flex flex-wrap gap-4 text-xs text-text-secondary">
               <span><strong>{selectedIds.size}</strong> מחשבים</span>
-              <span><strong>{days}</strong> ימים</span>
+              {recurring ? <span className="font-medium text-accent">חודשי מתחדש</span> : <span><strong>{days}</strong> ימים</span>}
               <span>{Number(priceMonthly).toLocaleString('he-IL')} ₪ למחשב/חודש</span>
               {selectedIds.size > 1 && (
                 <span className="font-bold text-accent">

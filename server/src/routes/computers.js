@@ -110,6 +110,9 @@ router.get('/:id', async (req, res, next) => {
           orderBy: { createdAt: 'desc' },
           include: { client: true, billingCycles: true },
         },
+        issues: {
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!computer) return res.status(404).json({ error: 'מחשב לא נמצא' });
@@ -185,6 +188,85 @@ router.put('/:id/restore', async (req, res, next) => {
       data: { status: 'AVAILABLE' },
     });
     res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/computers/:id/clone — clone computer N times
+router.post('/:id/clone', async (req, res, next) => {
+  try {
+    const computer = await prisma.computer.findUnique({ where: { id: req.params.id } });
+    if (!computer) return res.status(404).json({ error: 'מחשב לא נמצא' });
+
+    const count = parseInt(req.body.count) || 1;
+    if (count < 1 || count > 100) {
+      return res.status(400).json({ error: 'מספר העתקים חייב להיות בין 1 ל-100' });
+    }
+
+    // Extract prefix and number from internalId (e.g., "TXL3881" -> prefix="TXL", num=3881)
+    const match = computer.internalId.match(/^([A-Za-z\u0590-\u05FF-]*)(\d+)$/);
+    let prefix, startNum;
+    if (match) {
+      prefix = match[1];
+      startNum = parseInt(match[2]);
+    } else {
+      prefix = computer.internalId + '-';
+      startNum = 0;
+    }
+
+    // Find the highest existing number with this prefix
+    const existing = await prisma.computer.findMany({
+      where: { internalId: { startsWith: prefix } },
+      select: { internalId: true },
+    });
+
+    let maxNum = startNum;
+    for (const c of existing) {
+      const m = c.internalId.match(/^([A-Za-z\u0590-\u05FF-]*)(\d+)$/);
+      if (m && m[1] === prefix) {
+        const n = parseInt(m[2]);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+
+    // Also find highest serial suffix
+    const existingSerials = await prisma.computer.findMany({
+      where: { serial: { startsWith: computer.serial.replace(/-CLONE-\d+$/, '') } },
+      select: { serial: true },
+    });
+
+    let maxSerial = 0;
+    const baseSerial = computer.serial.replace(/-CLONE-\d+$/, '');
+    for (const c of existingSerials) {
+      const sm = c.serial.match(/-CLONE-(\d+)$/);
+      if (sm) {
+        const n = parseInt(sm[1]);
+        if (n > maxSerial) maxSerial = n;
+      }
+    }
+
+    const created = [];
+    for (let i = 1; i <= count; i++) {
+      const newInternalId = prefix + (maxNum + i);
+      const newSerial = baseSerial + '-CLONE-' + (maxSerial + i);
+
+      const clone = await prisma.computer.create({
+        data: {
+          internalId: newInternalId,
+          model: computer.model,
+          brand: computer.brand,
+          serial: newSerial,
+          specs: computer.specs,
+          status: 'AVAILABLE',
+          priceMonthly: computer.priceMonthly,
+          notes: computer.notes,
+        },
+      });
+      created.push(clone);
+    }
+
+    res.status(201).json({ count: created.length, computers: created });
   } catch (err) {
     next(err);
   }

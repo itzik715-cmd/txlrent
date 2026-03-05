@@ -12,6 +12,7 @@ const clientRoutes = require('./routes/clients');
 const rentalRoutes = require('./routes/rentals');
 const billingRoutes = require('./routes/billing');
 const importRoutes = require('./routes/import');
+const issueRoutes = require('./routes/issues');
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/billing', authMiddleware, billingRoutes);
 app.use('/api/billings', authMiddleware, billingRoutes);
 app.use('/api/payments', authMiddleware, billingRoutes);
 app.use('/api/import', authMiddleware, importRoutes);
+app.use('/api/issues', authMiddleware, issueRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
