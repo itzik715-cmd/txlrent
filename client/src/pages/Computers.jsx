@@ -61,11 +61,17 @@ export default function Computers() {
     },
   })
 
-  // Open detail from URL param (e.g. /computers?detail=xxx)
+  // Open detail or status filter from URL params
   useEffect(() => {
     const d = searchParams.get('detail')
+    const s = searchParams.get('status')
     if (d) {
       setDetailId(d)
+    }
+    if (s && statusTabs.some(t => t.key === s)) {
+      setStatusFilter(s)
+    }
+    if (d || s) {
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, setSearchParams])

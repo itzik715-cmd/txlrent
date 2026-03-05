@@ -118,6 +118,7 @@ export default function Dashboard() {
           iconColor="text-green-status"
           value={data.available || 0}
           label="פנויים להשכרה"
+          onClick={() => navigate('/computers?status=AVAILABLE')}
         />
         <KPICard
           icon={<Laptop className="w-5 h-5" />}
@@ -125,6 +126,7 @@ export default function Dashboard() {
           iconColor="text-accent"
           value={`${data.rented || 0}/${totalComputers}`}
           label="מושכרים כרגע"
+          onClick={() => navigate('/computers?status=RENTED')}
         />
         <KPICard
           icon={<Wrench className="w-5 h-5" />}
@@ -132,6 +134,7 @@ export default function Dashboard() {
           iconColor="text-orange-status"
           value={data.maintenance || 0}
           label="בתיקון / לא זמין"
+          onClick={() => navigate('/computers?status=MAINTENANCE')}
         />
         <KPICard
           icon={<TrendingUp className="w-5 h-5" />}
@@ -461,9 +464,12 @@ export default function Dashboard() {
   )
 }
 
-function KPICard({ icon, iconBg, iconColor, value, label }) {
+function KPICard({ icon, iconBg, iconColor, value, label, onClick }) {
   return (
-    <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150 p-5">
+    <div
+      onClick={onClick}
+      className={`bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150 p-5 ${onClick ? 'cursor-pointer' : ''}`}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className={`w-10 h-10 ${iconBg} rounded-md flex items-center justify-center ${iconColor}`}>
           {icon}
