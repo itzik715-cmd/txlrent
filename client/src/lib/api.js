@@ -19,11 +19,13 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor — handle 401
+// Response interceptor — handle expired token (401)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || ''
+    const isAuthRoute = url.includes('/auth/') || url.includes('/responses/')
+    if (error.response?.status === 401 && !isAuthRoute) {
       localStorage.removeItem('laptrack_token')
       localStorage.removeItem('laptrack_user')
       window.location.href = '/'
