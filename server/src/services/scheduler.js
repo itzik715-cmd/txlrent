@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendWhatsApp, getWhatsAppSettings, shortenUrl } = require('./notifications');
+const { sendWhatsApp, getWhatsAppSettings, getResponseUrl } = require('./notifications');
 
 const prisma = new PrismaClient();
 
@@ -100,8 +100,7 @@ async function processRule(rule, senderName) {
       data: { token, rentalId: rental.id },
     });
 
-    const rawUrl = `https://5.100.255.162/r/${token}`;
-    const responseUrl = await shortenUrl(rawUrl);
+    const responseUrl = getResponseUrl(token);
     const daysLeft = rental.expectedReturn
       ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
       : null;

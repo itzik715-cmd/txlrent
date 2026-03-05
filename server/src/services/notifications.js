@@ -120,17 +120,10 @@ async function sendEmail(to, subject, body) {
   }
 }
 
-async function shortenUrl(url) {
-  try {
-    const resp = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`);
-    if (resp.ok) {
-      const short = await resp.text();
-      if (short.startsWith('http')) return short;
-    }
-  } catch (err) {
-    console.error('[URL Shortener] Failed:', err.message);
-  }
-  return url; // fallback to original
+const RESPONSE_BASE_URL = 'https://5-100-255-162.il-cloud-xip.io';
+
+function getResponseUrl(token) {
+  return `${RESPONSE_BASE_URL}/r/${token}`;
 }
 
-module.exports = { sendWhatsApp, sendEmail, getWhatsAppSettings, shortenUrl };
+module.exports = { sendWhatsApp, sendEmail, getWhatsAppSettings, getResponseUrl };

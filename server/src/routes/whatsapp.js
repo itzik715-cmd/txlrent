@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendWhatsApp, getWhatsAppSettings, shortenUrl } = require('../services/notifications');
+const { sendWhatsApp, getWhatsAppSettings, getResponseUrl } = require('../services/notifications');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -70,8 +70,7 @@ router.post('/prepare-alert/:rentalId', async (req, res, next) => {
       data: { token, rentalId: rental.id },
     });
 
-    const rawUrl = `https://5.100.255.162/r/${token}`;
-    const responseUrl = await shortenUrl(rawUrl);
+    const responseUrl = getResponseUrl(token);
 
     const daysLeft = rental.expectedReturn
       ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
@@ -112,8 +111,7 @@ router.post('/send-rental-alert/:rentalId', async (req, res, next) => {
       data: { token, rentalId: rental.id },
     });
 
-    const rawUrl = `https://5.100.255.162/r/${token}`;
-    const responseUrl = await shortenUrl(rawUrl);
+    const responseUrl = getResponseUrl(token);
 
     const daysLeft = rental.expectedReturn
       ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
