@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User } from 'lucide-react'
+import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User, MessageCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -259,6 +259,15 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בהוספת מחשבים'),
   })
 
+  const sendAlertMutation = useMutation({
+    mutationFn: () => api.post(`/whatsapp/send-rental-alert/${rentalId}`).then(r => r.data),
+    onSuccess: (data) => {
+      if (data.sent) toast.success('הודעת WhatsApp נשלחה ללקוח')
+      else toast.error(data.reason || 'שליחה נכשלה')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
+  })
+
   if (!rental) {
     return (
       <Modal title="טוען..." onClose={onClose}>
@@ -502,6 +511,14 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
                     הוסף מחשבים
                   </button>
                 )}
+                <button
+                  onClick={() => sendAlertMutation.mutate()}
+                  disabled={sendAlertMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  {sendAlertMutation.isPending ? 'שולח...' : 'שלח התראה'}
+                </button>
                 <button
                   onClick={() => onReturn(rental)}
                   className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"

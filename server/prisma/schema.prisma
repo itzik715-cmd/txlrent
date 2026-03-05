@@ -87,6 +87,8 @@ model Rental {
   notes          String?
   createdAt      DateTime       @default(now())
   billingCycles  BillingCycle[]
+  whatsAppLogs   WhatsAppLog[]
+  responses      RentalResponse[]
 }
 
 enum RentalStatus {
@@ -119,4 +121,33 @@ model Payment {
   date     DateTime @default(now())
   method   String?
   notes    String?
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model WhatsAppLog {
+  id        String   @id @default(cuid())
+  rentalId  String?
+  rental    Rental?  @relation(fields: [rentalId], references: [id])
+  clientId  String?
+  phone     String
+  message   String
+  status    String   @default("SENT")
+  response  String?
+  createdAt DateTime @default(now())
+}
+
+model RentalResponse {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  rentalId  String
+  rental    Rental   @relation(fields: [rentalId], references: [id])
+  choice    String?
+  answered  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  answeredAt DateTime?
 }

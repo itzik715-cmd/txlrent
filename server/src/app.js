@@ -13,6 +13,9 @@ const rentalRoutes = require('./routes/rentals');
 const billingRoutes = require('./routes/billing');
 const importRoutes = require('./routes/import');
 const issueRoutes = require('./routes/issues');
+const settingsRoutes = require('./routes/settings');
+const whatsappRoutes = require('./routes/whatsapp');
+const responsesRoutes = require('./routes/responses');
 
 const app = express();
 
@@ -21,6 +24,7 @@ app.use(express.json());
 
 // Public routes
 app.use('/api/auth', authRoutes);
+app.use('/api/responses', responsesRoutes);
 
 // Protected routes
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
@@ -32,6 +36,8 @@ app.use('/api/billings', authMiddleware, billingRoutes);
 app.use('/api/payments', authMiddleware, billingRoutes);
 app.use('/api/import', authMiddleware, importRoutes);
 app.use('/api/issues', authMiddleware, issueRoutes);
+app.use('/api/settings', authMiddleware, settingsRoutes);
+app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

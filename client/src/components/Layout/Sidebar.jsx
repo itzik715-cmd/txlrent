@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Laptop, Users, FileText, CreditCard } from 'lucide-react'
+import { LayoutDashboard, Laptop, Users, FileText, CreditCard, Settings } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../lib/api'
 
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/clients', label: 'לקוחות', icon: Users },
   { to: '/rentals', label: 'השכרות', icon: FileText },
   // { to: '/billing', label: 'חיובים', icon: CreditCard },
+  { to: '/settings', label: 'הגדרות', icon: Settings },
 ]
 
 export default function Sidebar() {
