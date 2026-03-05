@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw, FileText, MessageCircle, Send } from 'lucide-react'
+import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw, FileText, MessageCircle, Send, Mail, Megaphone, CheckSquare, Square, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -33,6 +33,14 @@ export default function Clients() {
   const [profileTab, setProfileTab] = useState('details')
   const [form, setForm] = useState(emptyForm)
   const [editId, setEditId] = useState(null)
+  const [showBroadcast, setShowBroadcast] = useState(false)
+  const [broadcastMessage, setBroadcastMessage] = useState('')
+  const [broadcastSubject, setBroadcastSubject] = useState('')
+  const [broadcastChannel, setBroadcastChannel] = useState('whatsapp')
+  const [broadcastSelectAll, setBroadcastSelectAll] = useState(true)
+  const [broadcastSelected, setBroadcastSelected] = useState([])
+  const [broadcastSending, setBroadcastSending] = useState(false)
+  const [broadcastSearch, setBroadcastSearch] = useState('')
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients', showArchived],
@@ -180,10 +188,27 @@ export default function Clients() {
             {showArchived ? 'חזור לפעילים' : 'ארכיון'}
           </button>
           {!showArchived && (
-            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-text-primary text-white text-sm font-semibold rounded-sm hover:opacity-90 transition-all duration-150">
-              <Plus className="w-4 h-4" />
-              הוסף לקוח
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setShowBroadcast(true)
+                  setBroadcastSelectAll(true)
+                  setBroadcastSelected(clients.filter(c => !c.archived).map(c => c._id || c.id))
+                  setBroadcastMessage('')
+                  setBroadcastSubject('')
+                  setBroadcastChannel('whatsapp')
+                  setBroadcastSearch('')
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150"
+              >
+                <Megaphone className="w-4 h-4" />
+                שלח הודעה
+              </button>
+              <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-text-primary text-white text-sm font-semibold rounded-sm hover:opacity-90 transition-all duration-150">
+                <Plus className="w-4 h-4" />
+                הוסף לקוח
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -248,6 +273,176 @@ export default function Clients() {
             navigate(`/rentals?detail=${rentalId}`)
           }}
         />
+      )}
+
+      {/* Broadcast Message Modal */}
+      {showBroadcast && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowBroadcast(false)}>
+          <div className="bg-surface rounded-lg border border-border shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-green-600" />
+                <h3 className="text-sm font-bold text-text-primary">שליחת הודעה ללקוחות</h3>
+              </div>
+              <button onClick={() => setShowBroadcast(false)} className="text-text-tertiary hover:text-text-primary text-lg">&times;</button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Channel selection */}
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-2">ערוץ שליחה</label>
+                <div className="flex gap-2">
+                  {[
+                    { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle, color: 'bg-green-600' },
+                    { key: 'email', label: 'אימייל', icon: Mail, color: 'bg-accent' },
+                    { key: 'both', label: 'שניהם', icon: Send, color: 'bg-purple-600' },
+                  ].map(ch => (
+                    <button
+                      key={ch.key}
+                      onClick={() => setBroadcastChannel(ch.key)}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-sm transition-all ${
+                        broadcastChannel === ch.key
+                          ? `${ch.color} text-white`
+                          : 'bg-transparent border border-border text-text-secondary hover:border-accent'
+                      }`}
+                    >
+                      <ch.icon className="w-3.5 h-3.5" />
+                      {ch.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Email subject (only for email/both) */}
+              {(broadcastChannel === 'email' || broadcastChannel === 'both') && (
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">נושא האימייל</label>
+                  <input
+                    type="text"
+                    value={broadcastSubject}
+                    onChange={e => setBroadcastSubject(e.target.value)}
+                    placeholder="הודעה מ-LapTrack"
+                    className="w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm focus:outline-none focus:border-accent"
+                  />
+                </div>
+              )}
+
+              {/* Message */}
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">תוכן ההודעה *</label>
+                <textarea
+                  value={broadcastMessage}
+                  onChange={e => setBroadcastMessage(e.target.value)}
+                  rows={6}
+                  dir="rtl"
+                  className="w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent resize-y leading-relaxed"
+                  placeholder="כתוב את ההודעה כאן..."
+                />
+              </div>
+
+              {/* Client selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-text-secondary">בחירת לקוחות</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={broadcastSearch}
+                      onChange={e => setBroadcastSearch(e.target.value)}
+                      placeholder="חיפוש לקוח..."
+                      className="px-2 py-1 text-xs bg-bg border border-border rounded-sm focus:outline-none focus:border-accent w-[150px]"
+                    />
+                    <button
+                      onClick={() => {
+                        const activeClients = clients.filter(c => !c.archived)
+                        if (broadcastSelectAll) {
+                          setBroadcastSelected([])
+                          setBroadcastSelectAll(false)
+                        } else {
+                          setBroadcastSelected(activeClients.map(c => c._id || c.id))
+                          setBroadcastSelectAll(true)
+                        }
+                      }}
+                      className="text-xs font-medium text-accent hover:underline"
+                    >
+                      {broadcastSelectAll ? 'בטל הכל' : 'בחר הכל'}
+                    </button>
+                  </div>
+                </div>
+                <div className="border border-border rounded-sm max-h-[200px] overflow-y-auto divide-y divide-border/50">
+                  {clients.filter(c => !c.archived).filter(c => !broadcastSearch || c.name.toLowerCase().includes(broadcastSearch.toLowerCase())).map(c => {
+                    const cid = c._id || c.id
+                    const isSelected = broadcastSelected.includes(cid)
+                    const hasPhone = !!c.phone
+                    const hasEmail = !!c.email
+                    const channelOk = (broadcastChannel === 'whatsapp' && hasPhone) || (broadcastChannel === 'email' && hasEmail) || (broadcastChannel === 'both' && (hasPhone || hasEmail))
+                    return (
+                      <div
+                        key={cid}
+                        onClick={() => {
+                          if (isSelected) {
+                            setBroadcastSelected(prev => prev.filter(id => id !== cid))
+                            setBroadcastSelectAll(false)
+                          } else {
+                            setBroadcastSelected(prev => [...prev, cid])
+                          }
+                        }}
+                        className={`flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-accent-soft/20 transition-colors ${!channelOk ? 'opacity-50' : ''}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isSelected ? <CheckSquare className="w-4 h-4 text-accent" /> : <Square className="w-4 h-4 text-text-tertiary" />}
+                          <span className="text-sm text-text-primary">{c.name}</span>
+                          {!channelOk && <span className="text-[10px] text-red-500 bg-red-50 px-1.5 py-0.5 rounded">חסר {broadcastChannel === 'whatsapp' ? 'טלפון' : broadcastChannel === 'email' ? 'אימייל' : 'פרטים'}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-text-tertiary">
+                          {hasPhone && <span className="flex items-center gap-0.5"><MessageCircle className="w-3 h-3" /> {c.phone}</span>}
+                          {hasEmail && <span className="flex items-center gap-0.5"><Mail className="w-3 h-3" /> {c.email}</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="text-xs text-text-tertiary mt-1">
+                  {broadcastSelected.length} לקוחות נבחרו
+                </div>
+              </div>
+            </div>
+
+            {/* Footer actions */}
+            <div className="px-6 py-4 border-t border-border flex items-center justify-between shrink-0">
+              <button onClick={() => setShowBroadcast(false)} className="px-4 py-2 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                ביטול
+              </button>
+              <button
+                onClick={async () => {
+                  if (!broadcastMessage.trim()) { toast.error('נא לכתוב הודעה'); return }
+                  if (!broadcastSelected.length) { toast.error('נא לבחור לקוחות'); return }
+                  setBroadcastSending(true)
+                  try {
+                    const { data } = await api.post('/whatsapp/broadcast', {
+                      clientIds: broadcastSelected,
+                      message: broadcastMessage,
+                      subject: broadcastSubject || 'הודעה מ-LapTrack',
+                      channel: broadcastChannel,
+                    })
+                    if (data.sent > 0) toast.success(`נשלחו ${data.sent} הודעות בהצלחה`)
+                    if (data.failed > 0) toast.error(`${data.failed} הודעות נכשלו`)
+                    if (data.sent > 0) setShowBroadcast(false)
+                  } catch (err) {
+                    toast.error(err.response?.data?.error || 'שגיאה בשליחה')
+                  } finally {
+                    setBroadcastSending(false)
+                  }
+                }}
+                disabled={broadcastSending || !broadcastMessage.trim() || !broadcastSelected.length}
+                className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+              >
+                {broadcastChannel === 'email' ? <Mail className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                {broadcastSending ? 'שולח...' : `שלח ל-${broadcastSelected.length} לקוחות`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -266,6 +266,59 @@ router.post('/send-email', async (req, res, next) => {
   }
 });
 
+// POST /api/whatsapp/broadcast — send message to multiple clients
+router.post('/broadcast', async (req, res, next) => {
+  try {
+    const { clientIds, message, subject, channel } = req.body;
+    if (!clientIds || !clientIds.length || !message) {
+      return res.status(400).json({ error: 'חסרים לקוחות או הודעה' });
+    }
+
+    const clients = await prisma.client.findMany({
+      where: { id: { in: clientIds } },
+    });
+
+    const results = { sent: 0, failed: 0, errors: [] };
+
+    for (const client of clients) {
+      // WhatsApp
+      if ((channel === 'whatsapp' || channel === 'both') && client.phone) {
+        try {
+          const result = await sendWhatsApp(client.phone, message);
+          await prisma.whatsAppLog.create({
+            data: { clientId: client.id, phone: client.phone, message, status: result.sent ? 'SENT' : 'FAILED', response: result.sent ? null : (result.reason || null) },
+          });
+          if (result.sent) results.sent++;
+          else { results.failed++; results.errors.push(`${client.name}: ${result.reason}`); }
+        } catch (e) {
+          results.failed++;
+          results.errors.push(`${client.name}: ${e.message}`);
+        }
+      }
+
+      // Email
+      if ((channel === 'email' || channel === 'both') && client.email) {
+        try {
+          const html = message.replace(/\n/g, '<br>');
+          const result = await sendEmail(client.email, subject || 'הודעה מ-LapTrack', html);
+          await prisma.whatsAppLog.create({
+            data: { clientId: client.id, phone: client.email, message, status: result.sent ? 'SENT' : 'FAILED', response: result.sent ? null : (result.reason || null) },
+          });
+          if (result.sent) results.sent++;
+          else { results.failed++; results.errors.push(`${client.name}: ${result.reason}`); }
+        } catch (e) {
+          results.failed++;
+          results.errors.push(`${client.name}: ${e.message}`);
+        }
+      }
+    }
+
+    res.json(results);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/whatsapp/logs — sent messages log
 router.get('/logs', async (req, res, next) => {
   try {
