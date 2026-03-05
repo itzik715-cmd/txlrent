@@ -231,6 +231,9 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
   const [showAddComputers, setShowAddComputers] = useState(false)
   const [addCompIds, setAddCompIds] = useState(new Set())
   const [addCompSearch, setAddCompSearch] = useState('')
+  const [showAlertPreview, setShowAlertPreview] = useState(false)
+  const [alertMessage, setAlertMessage] = useState('')
+  const [alertLoading, setAlertLoading] = useState(false)
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['rentals'] })
@@ -259,14 +262,48 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בהוספת מחשבים'),
   })
 
-  const sendAlertMutation = useMutation({
-    mutationFn: () => api.post(`/whatsapp/send-rental-alert/${rentalId}`).then(r => r.data),
+  const sendCustomMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-custom', data).then(r => r.data),
     onSuccess: (data) => {
-      if (data.sent) toast.success('הודעת WhatsApp נשלחה ללקוח')
-      else toast.error(data.reason || 'שליחה נכשלה')
+      if (data.sent) {
+        toast.success('הודעת WhatsApp נשלחה ללקוח')
+        setShowAlertPreview(false)
+        setAlertMessage('')
+      } else toast.error(data.reason || 'שליחה נכשלה')
     },
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
   })
+
+  const openAlertPreview = async () => {
+    setAlertLoading(true)
+    try {
+      // Fetch settings to build preview
+      const settingsRes = await api.get('/settings')
+      const s = settingsRes.data
+      const senderName = s.wa_sender_name || 'LapTrack'
+      const template = s.wa_template_expiring || `היי {clientName}, כאן {senderName} ממחלקת התפעול\nשמנו לב שבעוד {daysLeft} ימים ({expectedReturn}) מסתיימת לך תקופת השכרת המחשב {computerId}.\nלבחירה לחצו כאן: {responseUrl}`
+
+      const daysLeft = rental.expectedReturn
+        ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
+        : null
+
+      const msg = template
+        .replace(/\{clientName\}/g, rental.client?.contactName || rental.client?.name || rental.clientName || '')
+        .replace(/\{computerName\}/g, `${rental.computer?.brand || ''} ${rental.computer?.model || ''}`)
+        .replace(/\{computerId\}/g, rental.computer?.internalId || rental.computerInternalId || '')
+        .replace(/\{daysLeft\}/g, daysLeft !== null ? String(daysLeft) : 'לא ידוע')
+        .replace(/\{expectedReturn\}/g, rental.expectedReturn ? new Date(rental.expectedReturn).toLocaleDateString('he-IL') : 'חודשי')
+        .replace(/\{senderName\}/g, senderName)
+        .replace(/\{responseUrl\}/g, '(יצורף אוטומטית)')
+
+      setAlertMessage(msg)
+      setShowAlertPreview(true)
+    } catch {
+      toast.error('שגיאה בטעינת תבנית')
+    } finally {
+      setAlertLoading(false)
+    }
+  }
 
   if (!rental) {
     return (
@@ -512,12 +549,12 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
                   </button>
                 )}
                 <button
-                  onClick={() => sendAlertMutation.mutate()}
-                  disabled={sendAlertMutation.isPending}
+                  onClick={openAlertPreview}
+                  disabled={alertLoading}
                   className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
-                  {sendAlertMutation.isPending ? 'שולח...' : 'שלח התראה'}
+                  {alertLoading ? 'טוען...' : 'שלח התראה'}
                 </button>
                 <button
                   onClick={() => onReturn(rental)}
@@ -582,6 +619,44 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
                   className="px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
                 >
                   {addComputersMutation.isPending ? 'מוסיף...' : `הוסף ${addCompIds.size || ''} מחשבים`}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* WhatsApp Alert Preview */}
+          {showAlertPreview && (
+            <div className="border border-green-300 rounded-sm p-4 mt-3 bg-green-50 space-y-3">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-bold text-text-primary">תצוגה מקדימה — WhatsApp ל-{rental.client?.name || rental.clientName}</span>
+                <span className="text-xs text-text-tertiary">({rental.client?.phone})</span>
+              </div>
+              <textarea
+                value={alertMessage}
+                onChange={(e) => setAlertMessage(e.target.value)}
+                rows={8}
+                dir="rtl"
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent transition-all duration-150 resize-y leading-relaxed"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setShowAlertPreview(false); setAlertMessage('') }}
+                  className="px-3 py-1.5 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150"
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={() => sendCustomMutation.mutate({
+                    phone: rental.client?.phone,
+                    message: alertMessage,
+                    clientId: rental.clientId,
+                  })}
+                  disabled={!alertMessage.trim() || sendCustomMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  <MessageCircle className="w-3 h-3" />
+                  {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
                 </button>
               </div>
             </div>
