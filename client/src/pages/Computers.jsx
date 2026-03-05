@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2, ChevronDown, Filter, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
-import DataTable from '../components/shared/DataTable'
 import SearchInput from '../components/shared/SearchInput'
 import StatusBadge from '../components/shared/StatusBadge'
 import Modal from '../components/shared/Modal'
@@ -95,6 +94,26 @@ export default function Computers() {
     },
   })
 
+  const [columnFilters, setColumnFilters] = useState({})
+
+  const setColFilter = (key, value) => {
+    setColumnFilters(prev => {
+      const next = { ...prev }
+      if (!value) delete next[key]
+      else next[key] = value
+      return next
+    })
+  }
+
+  const clearAllFilters = () => setColumnFilters({})
+
+  // Helper to get value for a column key from a row
+  const getColValue = (row, key) => {
+    if (key === 'specs') return [row.specs?.cpu, row.specs?.ram, row.specs?.storage].filter(Boolean).join(' | ')
+    if (key === 'tier') return row.tier ? `רמה ${row.tier}` : ''
+    return row[key] || ''
+  }
+
   const filtered = computers.filter((c) => {
     const matchesStatus = isArchiveView || statusFilter === 'all' || c.status === statusFilter
     const q = search.toLowerCase()
@@ -104,7 +123,12 @@ export default function Computers() {
       (c.model || '').toLowerCase().includes(q) ||
       (c.brand || '').toLowerCase().includes(q) ||
       (c.serial || '').toLowerCase().includes(q)
-    return matchesStatus && matchesSearch
+    // Column filters
+    const matchesColFilters = Object.entries(columnFilters).every(([key, filterVal]) => {
+      const val = String(getColValue(c, key)).toLowerCase()
+      return val.includes(filterVal.toLowerCase())
+    })
+    return matchesStatus && matchesSearch && matchesColFilters
   })
 
   const openAdd = () => {
@@ -149,23 +173,35 @@ export default function Computers() {
   const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }))
 
   const columns = [
-    { key: 'internalId', label: 'מזהה' },
-    { key: 'model', label: 'דגם' },
-    { key: 'brand', label: 'מותג' },
-    { key: 'serial', label: 'סריאלי' },
+    { key: 'internalId', label: 'מזהה', filterable: true },
+    { key: 'brand', label: 'מותג', filterable: true },
+    { key: 'model', label: 'דגם', filterable: true },
     {
-      key: 'status',
-      label: 'סטטוס',
-      render: (val) => <StatusBadge status={val} />,
+      key: 'specs',
+      label: 'מפרט',
+      filterable: true,
+      render: (_, row) => {
+        const parts = [row.specs?.cpu, row.specs?.ram, row.specs?.storage].filter(Boolean)
+        return parts.length > 0
+          ? <span className="text-xs text-text-secondary">{parts.join(' | ')}</span>
+          : <span className="text-xs text-text-tertiary">-</span>
+      },
     },
     {
       key: 'tier',
       label: 'רמה',
-      render: (val) => val ? `רמה ${val}` : '-',
+      filterable: true,
+      render: (val) => val ? <span className="text-xs font-semibold text-accent bg-accent-soft px-1.5 py-0.5 rounded">רמה {val}</span> : '-',
+    },
+    {
+      key: 'status',
+      label: 'סטטוס',
+      filterable: true,
+      render: (val) => <StatusBadge status={val} />,
     },
     ...(isArchiveView ? [] : [{
       key: 'actions',
-      label: 'פעולות',
+      label: '',
       render: (_, row) => (
         <button
           onClick={(e) => {
@@ -179,6 +215,21 @@ export default function Computers() {
       ),
     }]),
   ]
+
+  // Get unique values for filterable columns (for dropdown)
+  const columnOptions = useMemo(() => {
+    const opts = {}
+    for (const col of columns) {
+      if (!col.filterable) continue
+      const values = new Set()
+      for (const c of computers) {
+        const v = getColValue(c, col.key)
+        if (v) values.add(String(v))
+      }
+      opts[col.key] = [...values].sort()
+    }
+    return opts
+  }, [computers])
 
   return (
     <div className="space-y-5">
@@ -220,16 +271,71 @@ export default function Computers() {
         </div>
       </div>
 
+      {/* Active column filters indicator */}
+      {Object.keys(columnFilters).length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter className="w-3.5 h-3.5 text-accent" />
+          <span className="text-xs text-text-secondary">מסננים פעילים:</span>
+          {Object.entries(columnFilters).map(([key, val]) => (
+            <span key={key} className="inline-flex items-center gap-1 text-xs bg-accent-soft text-accent px-2 py-0.5 rounded">
+              {columns.find(c => c.key === key)?.label}: {val}
+              <button onClick={() => setColFilter(key, '')} className="hover:text-red-500">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <button onClick={clearAllFilters} className="text-xs text-red-500 hover:underline">נקה הכל</button>
+        </div>
+      )}
+
       {/* Table */}
       {isLoading ? (
         <p className="text-text-tertiary text-sm">טוען...</p>
+      ) : filtered.length === 0 ? (
+        <div className="bg-surface rounded-lg border border-border shadow-sm p-8 text-center">
+          <p className="text-text-tertiary text-sm">{isArchiveView ? 'אין מחשבים בארכיון' : 'לא נמצאו מחשבים'}</p>
+        </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={filtered}
-          onRowClick={(row) => setDetailId(row.id)}
-          emptyMessage={isArchiveView ? 'אין מחשבים בארכיון' : 'לא נמצאו מחשבים'}
-        />
+        <div className="bg-surface rounded-lg border border-border shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-bg">
+                  {columns.map(col => (
+                    <th key={col.key} className="px-3 py-2 text-right">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-text-tertiary">{col.label}</div>
+                      {col.filterable && (
+                        <ColumnFilter
+                          value={columnFilters[col.key] || ''}
+                          options={columnOptions[col.key] || []}
+                          onChange={(v) => setColFilter(col.key, v)}
+                        />
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((row) => (
+                  <tr
+                    key={row.id}
+                    onClick={() => setDetailId(row.id)}
+                    className="border-b border-border hover:bg-bg transition-all duration-150 cursor-pointer"
+                  >
+                    {columns.map(col => (
+                      <td key={col.key} className="px-3 py-2.5 text-sm text-text-primary">
+                        {col.render ? col.render(row[col.key], row) : (row[col.key] || '-')}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-3 py-2 text-xs text-text-tertiary border-t border-border bg-bg">
+            {filtered.length} מחשבים{filtered.length !== computers.length ? ` (מתוך ${computers.length})` : ''}
+          </div>
+        </div>
       )}
 
       {/* Add/Edit Modal */}
@@ -815,6 +921,60 @@ function DetailRow({ label, value }) {
     <div className="flex items-center gap-2">
       <span className="text-xs font-medium text-text-tertiary w-20">{label}</span>
       <span className="text-sm text-text-primary">{value || '-'}</span>
+    </div>
+  )
+}
+
+function ColumnFilter({ value, options, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div className="relative mt-1" ref={ref}>
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="סנן..."
+          className="w-full px-1.5 py-1 text-xs bg-surface border border-border rounded text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-all duration-150"
+        />
+        {options.length > 0 && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+            className="flex-shrink-0 p-0.5 text-text-tertiary hover:text-accent"
+          >
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-surface border border-border rounded shadow-lg max-h-48 overflow-y-auto">
+          <button
+            onClick={() => { onChange(''); setOpen(false) }}
+            className="w-full text-right px-2 py-1.5 text-xs text-text-tertiary hover:bg-bg"
+          >
+            הכל
+          </button>
+          {options.map(opt => (
+            <button
+              key={opt}
+              onClick={() => { onChange(opt); setOpen(false) }}
+              className={`w-full text-right px-2 py-1.5 text-xs hover:bg-bg transition-colors ${value === opt ? 'bg-accent-soft text-accent font-semibold' : 'text-text-primary'}`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
