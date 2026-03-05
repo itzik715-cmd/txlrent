@@ -142,6 +142,75 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// POST /api/rentals/bulk — create multiple rentals for one client
+router.post('/bulk', async (req, res, next) => {
+  try {
+    const { computerIds, clientId, startDate, expectedReturn, priceMonthly, notes } = req.body;
+
+    if (!computerIds || !Array.isArray(computerIds) || computerIds.length === 0) {
+      return res.status(400).json({ error: 'יש לבחור לפחות מחשב אחד' });
+    }
+    if (!clientId || !startDate || !expectedReturn || !priceMonthly) {
+      return res.status(400).json({ error: 'חסרים שדות חובה' });
+    }
+
+    // Verify all computers are available
+    const computers = await prisma.computer.findMany({
+      where: { id: { in: computerIds } },
+    });
+
+    if (computers.length !== computerIds.length) {
+      return res.status(400).json({ error: 'חלק מהמחשבים לא נמצאו' });
+    }
+
+    const unavailable = computers.filter(c => c.status !== 'AVAILABLE');
+    if (unavailable.length > 0) {
+      return res.status(400).json({
+        error: `המחשבים הבאים אינם זמינים: ${unavailable.map(c => c.internalId).join(', ')}`,
+      });
+    }
+
+    const rentals = await prisma.$transaction(async (tx) => {
+      const created = [];
+      for (const compId of computerIds) {
+        const rental = await tx.rental.create({
+          data: {
+            computerId: compId,
+            clientId,
+            startDate: new Date(startDate),
+            expectedReturn: new Date(expectedReturn),
+            priceMonthly: parseFloat(priceMonthly),
+            notes,
+          },
+        });
+
+        await tx.computer.update({
+          where: { id: compId },
+          data: { status: 'RENTED' },
+        });
+
+        // Create first billing cycle
+        const dueDate = new Date(startDate);
+        dueDate.setMonth(dueDate.getMonth() + 1);
+        await tx.billingCycle.create({
+          data: {
+            rentalId: rental.id,
+            amount: parseFloat(priceMonthly),
+            dueDate,
+          },
+        });
+
+        created.push(rental);
+      }
+      return created;
+    });
+
+    res.status(201).json({ count: rentals.length, rentals });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /api/rentals/:id/return — close rental
 router.put('/:id/return', async (req, res, next) => {
   try {
