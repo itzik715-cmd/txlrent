@@ -14,12 +14,12 @@ router.get('/summary', async (req, res, next) => {
     const weekFromNow = new Date(today);
     weekFromNow.setDate(weekFromNow.getDate() + 7);
 
-    // Stats
+    // Stats — exclude SOLD and ARCHIVED from counts
     const [available, rented, maintenance, total] = await Promise.all([
       prisma.computer.count({ where: { status: 'AVAILABLE' } }),
       prisma.computer.count({ where: { status: 'RENTED' } }),
       prisma.computer.count({ where: { status: 'MAINTENANCE' } }),
-      prisma.computer.count(),
+      prisma.computer.count({ where: { status: { notIn: ['SOLD', 'ARCHIVED'] } } }),
     ]);
 
     // Monthly revenue (sum of priceMonthly from active rentals)

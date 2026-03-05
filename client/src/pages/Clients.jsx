@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, ExternalLink, Calendar, CreditCard } from 'lucide-react'
+import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -26,6 +26,7 @@ export default function Clients() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showProfile, setShowProfile] = useState(null)
   const [profileTab, setProfileTab] = useState('details')
@@ -33,8 +34,8 @@ export default function Clients() {
   const [editId, setEditId] = useState(null)
 
   const { data: clients = [], isLoading } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.get('/clients').then((r) => r.data),
+    queryKey: ['clients', showArchived],
+    queryFn: () => api.get(showArchived ? '/clients?archived=true' : '/clients').then((r) => r.data),
   })
 
   const saveMutation = useMutation({
@@ -106,7 +107,7 @@ export default function Clients() {
     { key: 'contactPerson', label: 'איש קשר' },
     { key: 'phone', label: 'טלפון' },
     { key: 'email', label: 'אימייל' },
-    {
+    ...(showArchived ? [] : [{
       key: 'balance',
       label: 'יתרת חוב',
       render: (val) => {
@@ -117,7 +118,7 @@ export default function Clients() {
           </span>
         )
       },
-    },
+    }]),
     {
       key: 'actions',
       label: 'פעולות',
@@ -126,7 +127,7 @@ export default function Clients() {
           onClick={(e) => { e.stopPropagation(); openEdit(row) }}
           className="text-xs font-medium text-accent hover:underline"
         >
-          עריכה
+          {showArchived ? 'צפייה' : 'עריכה'}
         </button>
       ),
     },
@@ -135,11 +136,28 @@ export default function Clients() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-text-primary">לקוחות</h1>
-        <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-text-primary text-white text-sm font-semibold rounded-sm hover:opacity-90 transition-all duration-150">
-          <Plus className="w-4 h-4" />
-          הוסף לקוח
-        </button>
+        <h1 className="text-xl font-bold text-text-primary">
+          {showArchived ? 'ארכיון לקוחות' : 'לקוחות'}
+        </h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowArchived(!showArchived)}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-sm transition-all duration-150 ${
+              showArchived
+                ? 'bg-gray-600 text-white'
+                : 'bg-transparent border-[1.5px] border-border text-text-secondary hover:border-accent hover:text-accent'
+            }`}
+          >
+            <Archive className="w-4 h-4" />
+            {showArchived ? 'חזור לפעילים' : 'ארכיון'}
+          </button>
+          {!showArchived && (
+            <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-text-primary text-white text-sm font-semibold rounded-sm hover:opacity-90 transition-all duration-150">
+              <Plus className="w-4 h-4" />
+              הוסף לקוח
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="w-full sm:w-72">
@@ -153,7 +171,7 @@ export default function Clients() {
           columns={columns}
           data={filtered}
           onRowClick={(row) => { setShowProfile(row); setProfileTab('details') }}
-          emptyMessage="לא נמצאו לקוחות"
+          emptyMessage={showArchived ? 'אין לקוחות בארכיון' : 'לא נמצאו לקוחות'}
         />
       )}
 
@@ -204,6 +222,7 @@ export default function Clients() {
 }
 
 function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavigateToComputer }) {
+  const queryClient = useQueryClient()
   const clientId = client._id || client.id
 
   const { data: clientDetail } = useQuery({
@@ -211,8 +230,29 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
     queryFn: () => api.get(`/clients/${clientId}`).then((r) => r.data),
   })
 
+  const archiveMutation = useMutation({
+    mutationFn: () => api.put(`/clients/${clientId}/archive`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      toast.success('הלקוח הועבר לארכיון')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: () => api.put(`/clients/${clientId}/restore`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] })
+      toast.success('הלקוח שוחזר')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
+
   const rentals = clientDetail?.rentals || []
   const payments = clientDetail?.payments || []
+  const isArchived = client.archived || clientDetail?.archived
 
   const activeCount = rentals.filter((r) => r.status === 'ACTIVE' || r.status === 'OVERDUE').length
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
@@ -227,6 +267,11 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
     <Modal title={client.name} onClose={onClose} wide>
       {/* Quick Stats */}
       <div className="flex flex-wrap gap-3 mb-4">
+        {isArchived && (
+          <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+            ארכיון
+          </span>
+        )}
         {activeCount > 0 && (
           <span className="text-xs font-semibold text-accent bg-accent-soft px-2.5 py-1 rounded-full">
             {activeCount} השכרות פעילות
@@ -276,11 +321,36 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
             highlight={(client.balance || client.outstandingBalance) > 0}
           />
           {client.notes && <DetailRow label="הערות" value={client.notes} />}
-          <div className="flex justify-end pt-3 border-t border-border">
-            <button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150">
-              <Pencil className="w-3.5 h-3.5" />
-              עריכה
-            </button>
+          <div className="flex flex-wrap gap-3 justify-end pt-3 border-t border-border">
+            {isArchived ? (
+              <button
+                onClick={() => restoreMutation.mutate()}
+                disabled={restoreMutation.isPending}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                שחזר לקוח
+              </button>
+            ) : (
+              <>
+                <button onClick={onEdit} className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150">
+                  <Pencil className="w-3.5 h-3.5" />
+                  עריכה
+                </button>
+                {activeCount === 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm('להעביר את הלקוח לארכיון?')) archiveMutation.mutate()
+                    }}
+                    disabled={archiveMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-gray-400 text-gray-600 rounded-sm hover:bg-gray-100 transition-all duration-150 disabled:opacity-50"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    ארכיון
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

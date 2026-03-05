@@ -17,6 +17,10 @@ const statusMap = {
   active: { label: 'פעיל', bg: 'bg-accent-soft', text: 'text-accent' },
   RETURNED: { label: 'הוחזר', bg: 'bg-green-soft', text: 'text-green-status' },
   returned: { label: 'הוחזר', bg: 'bg-green-soft', text: 'text-green-status' },
+  SOLD: { label: 'נמכר', bg: 'bg-purple-100', text: 'text-purple-700' },
+  sold: { label: 'נמכר', bg: 'bg-purple-100', text: 'text-purple-700' },
+  ARCHIVED: { label: 'ארכיון', bg: 'bg-gray-100', text: 'text-gray-600' },
+  archived: { label: 'ארכיון', bg: 'bg-gray-100', text: 'text-gray-600' },
 }
 
 export default function StatusBadge({ status, label: customLabel }) {

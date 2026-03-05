@@ -5,9 +5,13 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 // GET /api/clients — list all clients with outstanding balance
+// By default excludes archived. Use ?archived=true to see them.
 router.get('/', async (req, res, next) => {
   try {
+    const showArchived = req.query.archived === 'true';
+
     const clients = await prisma.client.findMany({
+      where: { archived: showArchived },
       orderBy: { name: 'asc' },
       include: {
         rentals: {
@@ -79,6 +83,40 @@ router.put('/:id', async (req, res, next) => {
       data: { name, contactName, phone, email, address, notes },
     });
     res.json(client);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/clients/:id/archive — soft delete (archive)
+router.put('/:id/archive', async (req, res, next) => {
+  try {
+    const client = await prisma.client.findUnique({
+      where: { id: req.params.id },
+      include: { rentals: { where: { status: 'ACTIVE' } } },
+    });
+    if (!client) return res.status(404).json({ error: 'לקוח לא נמצא' });
+    if (client.rentals.length > 0) {
+      return res.status(400).json({ error: 'לא ניתן לארכב לקוח עם השכרות פעילות' });
+    }
+    const updated = await prisma.client.update({
+      where: { id: req.params.id },
+      data: { archived: true },
+    });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/clients/:id/restore — restore from archive
+router.put('/:id/restore', async (req, res, next) => {
+  try {
+    const updated = await prisma.client.update({
+      where: { id: req.params.id },
+      data: { archived: false },
+    });
+    res.json(updated);
   } catch (err) {
     next(err);
   }

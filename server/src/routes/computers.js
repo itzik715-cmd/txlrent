@@ -12,19 +12,29 @@ const computerSchema = z.object({
   brand: z.string().min(1, 'נדרש מותג'),
   serial: z.string().min(1, 'נדרש מספר סריאלי'),
   specs: z.any().optional(),
-  status: z.enum(['AVAILABLE', 'RENTED', 'MAINTENANCE', 'LOST']).optional(),
+  status: z.enum(['AVAILABLE', 'RENTED', 'MAINTENANCE', 'LOST', 'SOLD', 'ARCHIVED']).optional(),
   priceMonthly: z.number().positive('מחיר חודשי חייב להיות חיובי'),
   notes: z.string().optional().nullable(),
 });
 
 // GET /api/computers — list with filters, paginated
+// By default excludes SOLD and ARCHIVED. Use ?archive=true to see them.
 router.get('/', async (req, res, next) => {
   try {
-    const { status, search, page = 1, limit = 500 } = req.query;
+    const { status, search, page = 1, limit = 500, archive } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
-    if (status) where.status = status;
+    if (archive === 'true') {
+      // Show only archived/sold
+      where.status = { in: ['SOLD', 'ARCHIVED'] };
+    } else if (status) {
+      where.status = status;
+    } else {
+      // Default: exclude sold and archived
+      where.status = { notIn: ['SOLD', 'ARCHIVED'] };
+    }
+
     if (search) {
       where.OR = [
         { internalId: { contains: search, mode: 'insensitive' } },
@@ -122,6 +132,60 @@ router.put('/:id', async (req, res, next) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: 'נתונים לא תקינים', details: err.errors });
     }
+    next(err);
+  }
+});
+
+// PUT /api/computers/:id/archive — move to archive
+router.put('/:id/archive', async (req, res, next) => {
+  try {
+    const computer = await prisma.computer.findUnique({ where: { id: req.params.id } });
+    if (!computer) return res.status(404).json({ error: 'מחשב לא נמצא' });
+    if (computer.status === 'RENTED') {
+      return res.status(400).json({ error: 'לא ניתן לארכב מחשב מושכר. יש להחזיר קודם' });
+    }
+    const updated = await prisma.computer.update({
+      where: { id: req.params.id },
+      data: { status: 'ARCHIVED' },
+    });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/computers/:id/sell — mark as sold
+router.put('/:id/sell', async (req, res, next) => {
+  try {
+    const computer = await prisma.computer.findUnique({ where: { id: req.params.id } });
+    if (!computer) return res.status(404).json({ error: 'מחשב לא נמצא' });
+    if (computer.status === 'RENTED') {
+      return res.status(400).json({ error: 'לא ניתן למכור מחשב מושכר. יש להחזיר קודם' });
+    }
+    const updated = await prisma.computer.update({
+      where: { id: req.params.id },
+      data: { status: 'SOLD', notes: req.body.notes || computer.notes },
+    });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/computers/:id/restore — restore from archive/sold back to available
+router.put('/:id/restore', async (req, res, next) => {
+  try {
+    const computer = await prisma.computer.findUnique({ where: { id: req.params.id } });
+    if (!computer) return res.status(404).json({ error: 'מחשב לא נמצא' });
+    if (computer.status !== 'ARCHIVED' && computer.status !== 'SOLD') {
+      return res.status(400).json({ error: 'ניתן לשחזר רק מחשבים מאורכבים או שנמכרו' });
+    }
+    const updated = await prisma.computer.update({
+      where: { id: req.params.id },
+      data: { status: 'AVAILABLE' },
+    });
+    res.json(updated);
+  } catch (err) {
     next(err);
   }
 });

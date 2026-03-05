@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, QrCode, ArrowRight, Pencil, Calendar, User, CreditCard } from 'lucide-react'
+import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -14,6 +14,7 @@ const statusTabs = [
   { key: 'AVAILABLE', label: 'פנוי' },
   { key: 'RENTED', label: 'מושכר' },
   { key: 'MAINTENANCE', label: 'תיקון' },
+  { key: 'archive', label: 'ארכיון' },
 ]
 
 const emptyForm = {
@@ -51,9 +52,11 @@ export default function Computers() {
     }
   }, [searchParams, setSearchParams])
 
+  const isArchiveView = statusFilter === 'archive'
+
   const { data: computers = [], isLoading } = useQuery({
-    queryKey: ['computers'],
-    queryFn: () => api.get('/computers').then((r) => r.data),
+    queryKey: ['computers', isArchiveView],
+    queryFn: () => api.get(isArchiveView ? '/computers?archive=true' : '/computers').then((r) => r.data),
   })
 
   const saveMutation = useMutation({
@@ -74,7 +77,7 @@ export default function Computers() {
   })
 
   const filtered = computers.filter((c) => {
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter
+    const matchesStatus = isArchiveView || statusFilter === 'all' || c.status === statusFilter
     const q = search.toLowerCase()
     const matchesSearch =
       !q ||
@@ -140,7 +143,7 @@ export default function Computers() {
       label: 'מחיר חודשי',
       render: (val) => formatCurrency(val),
     },
-    {
+    ...(isArchiveView ? [] : [{
       key: 'actions',
       label: 'פעולות',
       render: (_, row) => (
@@ -154,21 +157,25 @@ export default function Computers() {
           עריכה
         </button>
       ),
-    },
+    }]),
   ]
 
   return (
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-text-primary">מחשבים</h1>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2 bg-text-primary text-white text-sm font-semibold rounded-sm hover:opacity-90 transition-all duration-150"
-        >
-          <Plus className="w-4 h-4" />
-          הוסף מחשב
-        </button>
+        <h1 className="text-xl font-bold text-text-primary">
+          {isArchiveView ? 'ארכיון מחשבים' : 'מחשבים'}
+        </h1>
+        {!isArchiveView && (
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-text-primary text-white text-sm font-semibold rounded-sm hover:opacity-90 transition-all duration-150"
+          >
+            <Plus className="w-4 h-4" />
+            הוסף מחשב
+          </button>
+        )}
       </div>
 
       {/* Search & Filters */}
@@ -183,7 +190,7 @@ export default function Computers() {
               onClick={() => setStatusFilter(tab.key)}
               className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-all duration-150 ${
                 statusFilter === tab.key
-                  ? 'bg-accent text-white'
+                  ? tab.key === 'archive' ? 'bg-gray-600 text-white' : 'bg-accent text-white'
                   : 'bg-surface border border-border text-text-secondary hover:text-accent hover:border-accent'
               }`}
             >
@@ -201,7 +208,7 @@ export default function Computers() {
           columns={columns}
           data={filtered}
           onRowClick={(row) => setDetailId(row.id)}
-          emptyMessage="לא נמצאו מחשבים"
+          emptyMessage={isArchiveView ? 'אין מחשבים בארכיון' : 'לא נמצאו מחשבים'}
         />
       )}
 
@@ -268,12 +275,49 @@ export default function Computers() {
 }
 
 function ComputerDetail({ computerId, onClose, onEdit }) {
+  const queryClient = useQueryClient()
   const { data: computer, isLoading } = useQuery({
     queryKey: ['computer-detail', computerId],
     queryFn: () => api.get(`/computers/${computerId}`).then((r) => r.data),
   })
 
   const [activeTab, setActiveTab] = useState('info')
+
+  const archiveMutation = useMutation({
+    mutationFn: () => api.put(`/computers/${computerId}/archive`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['computer-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      toast.success('המחשב הועבר לארכיון')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
+
+  const sellMutation = useMutation({
+    mutationFn: () => api.put(`/computers/${computerId}/sell`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['computer-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      toast.success('המחשב סומן כנמכר')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: () => api.put(`/computers/${computerId}/restore`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['computer-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      toast.success('המחשב שוחזר למלאי')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
+  })
 
   if (isLoading) {
     return (
@@ -291,6 +335,8 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
     )
   }
 
+  const isArchivedOrSold = computer.status === 'ARCHIVED' || computer.status === 'SOLD'
+  const isRented = computer.status === 'RENTED'
   const rentals = computer.rentals || []
   const activeRental = rentals.find((r) => r.status === 'ACTIVE' || r.status === 'OVERDUE')
   const totalRevenue = rentals.reduce((sum, r) => {
@@ -375,25 +421,64 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
               <DetailRow label="הערות" value={computer.notes} />
             </div>
           )}
-          <div className="flex gap-3 justify-end pt-3 border-t border-border">
-            <button
-              onClick={() => onEdit(computer)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              עריכה
-            </button>
-            <button
-              onClick={() => {
-                api.post(`/computers/${computer.id}/generate-qr`).then((res) => {
-                  toast.success('QR Code נוצר בהצלחה')
-                }).catch(() => toast.error('שגיאה ביצירת QR'))
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"
-            >
-              <QrCode className="w-3.5 h-3.5" />
-              צור QR
-            </button>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3 justify-end pt-3 border-t border-border">
+            {isArchivedOrSold ? (
+              <button
+                onClick={() => restoreMutation.mutate()}
+                disabled={restoreMutation.isPending}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                שחזר למלאי
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => onEdit(computer)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  עריכה
+                </button>
+                <button
+                  onClick={() => {
+                    api.post(`/computers/${computer.id}/generate-qr`).then(() => {
+                      toast.success('QR Code נוצר בהצלחה')
+                    }).catch(() => toast.error('שגיאה ביצירת QR'))
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  צור QR
+                </button>
+                {!isRented && (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (confirm('להעביר את המחשב לארכיון?')) archiveMutation.mutate()
+                      }}
+                      disabled={archiveMutation.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-gray-400 text-gray-600 rounded-sm hover:bg-gray-100 transition-all duration-150 disabled:opacity-50"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                      ארכיון
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm('לסמן את המחשב כנמכר? המחשב יצא מהמלאי הפעיל')) sellMutation.mutate()
+                      }}
+                      disabled={sellMutation.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-purple-400 text-purple-600 rounded-sm hover:bg-purple-50 transition-all duration-150 disabled:opacity-50"
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                      נמכר
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
