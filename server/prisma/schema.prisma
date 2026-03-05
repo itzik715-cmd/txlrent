@@ -56,6 +56,8 @@ enum ComputerStatus {
   AVAILABLE
   RENTED
   MAINTENANCE
+  PENDING_RETURN
+  PENDING_CLEANING
   LOST
   SOLD
   ARCHIVED
@@ -92,6 +94,7 @@ model Rental {
   billingCycles  BillingCycle[]
   whatsAppLogs   WhatsAppLog[]
   responses      RentalResponse[]
+  followups      ReturnFollowup[]
 }
 
 enum RentalStatus {
@@ -152,6 +155,18 @@ model WhatsAppLog {
   status    String   @default("SENT")
   response  String?
   createdAt DateTime @default(now())
+}
+
+model ReturnFollowup {
+  id             String   @id @default(cuid())
+  rentalId       String
+  rental         Rental   @relation(fields: [rentalId], references: [id])
+  returnType     String   // return_pickup, return_courier
+  expectedDate   DateTime?
+  status         String   @default("PENDING") // PENDING, RETURNED, CANCELLED
+  notes          String?
+  createdAt      DateTime @default(now())
+  resolvedAt     DateTime?
 }
 
 model RentalResponse {

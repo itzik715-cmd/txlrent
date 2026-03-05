@@ -12,6 +12,8 @@ const statusTabs = [
   { key: 'all', label: 'הכל' },
   { key: 'AVAILABLE', label: 'פנוי' },
   { key: 'RENTED', label: 'מושכר' },
+  { key: 'PENDING_RETURN', label: 'ממתין להחזרה' },
+  { key: 'PENDING_CLEANING', label: 'ממתין לניקוי' },
   { key: 'MAINTENANCE', label: 'תיקון' },
   { key: 'archive', label: 'ארכיון' },
 ]

@@ -77,6 +77,15 @@ router.get('/summary', async (req, res, next) => {
       },
     });
 
+    // Pending return follow-ups
+    const pendingReturns = await prisma.returnFollowup.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { expectedDate: 'asc' },
+      include: {
+        rental: { include: { client: true, computer: true } },
+      },
+    });
+
     // Recent activity (last 10 rentals + last 10 payments, merged)
     const [recentRentals, recentPayments] = await Promise.all([
       prisma.rental.findMany({
@@ -151,6 +160,18 @@ router.get('/summary', async (req, res, next) => {
         computerInternalId: r.rental.computer.internalId,
         rentalId: r.rentalId,
       })),
+      pendingReturns: pendingReturns.map(f => ({
+        id: f.id,
+        returnType: f.returnType,
+        expectedDate: f.expectedDate,
+        createdAt: f.createdAt,
+        clientName: f.rental.client.name,
+        clientPhone: f.rental.client.phone,
+        computerInternalId: f.rental.computer.internalId,
+        computerId: f.rental.computerId,
+        rentalId: f.rentalId,
+        daysLeft: f.expectedDate ? Math.ceil((new Date(f.expectedDate) - new Date()) / (1000 * 60 * 60 * 24)) : null,
+      })),
     });
   } catch (err) {
     next(err);
@@ -185,11 +206,72 @@ router.patch('/responses/:id/handle', async (req, res, next) => {
       });
     }
 
+    // If return (pickup/courier), create follow-up and update computer status
+    if ((response.choice === 'return_pickup' || response.choice === 'return_courier') && newExpectedReturn) {
+      await prisma.returnFollowup.create({
+        data: {
+          rentalId: response.rentalId,
+          returnType: response.choice,
+          expectedDate: new Date(newExpectedReturn),
+        },
+      });
+      // Update computer to PENDING_RETURN
+      await prisma.computer.update({
+        where: { id: response.rental.computerId },
+        data: { status: 'PENDING_RETURN' },
+      });
+    }
+
     const updated = await prisma.rentalResponse.update({
       where: { id: req.params.id },
       data: { handled: true, handledAt: new Date() },
     });
     res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/dashboard/followups/:id/returned — mark follow-up as returned, set computer to PENDING_CLEANING
+router.patch('/followups/:id/returned', async (req, res, next) => {
+  try {
+    const followup = await prisma.returnFollowup.findUnique({
+      where: { id: req.params.id },
+      include: { rental: true },
+    });
+    if (!followup) return res.status(404).json({ error: 'מעקב לא נמצא' });
+
+    await prisma.returnFollowup.update({
+      where: { id: req.params.id },
+      data: { status: 'RETURNED', resolvedAt: new Date() },
+    });
+
+    // Update computer status to PENDING_CLEANING
+    await prisma.computer.update({
+      where: { id: followup.rental.computerId },
+      data: { status: 'PENDING_CLEANING' },
+    });
+
+    // Mark rental as returned
+    await prisma.rental.update({
+      where: { id: followup.rentalId },
+      data: { status: 'RETURNED', actualReturn: new Date() },
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/dashboard/followups/:id/cancel — cancel follow-up
+router.patch('/followups/:id/cancel', async (req, res, next) => {
+  try {
+    await prisma.returnFollowup.update({
+      where: { id: req.params.id },
+      data: { status: 'CANCELLED', resolvedAt: new Date() },
+    });
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
