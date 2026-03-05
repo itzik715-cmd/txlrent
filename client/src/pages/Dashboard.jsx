@@ -53,6 +53,7 @@ export default function Dashboard() {
   const [handleMessage, setHandleMessage] = useState('')
   const [renewDate, setRenewDate] = useState('')
   const [renewMonthly, setRenewMonthly] = useState(false)
+  const [returnDetail, setReturnDetail] = useState(null)
 
   const { data: settings = {} } = useQuery({
     queryKey: ['settings'],
@@ -310,7 +311,7 @@ export default function Dashboard() {
                 const isOverdue = item.daysLeft !== null && item.daysLeft < 0
                 const isToday = item.daysLeft === 0
                 return (
-                  <div key={item.id} className="flex items-center justify-between py-2.5 px-3 border border-border rounded-sm hover:bg-accent-soft/20 transition-all">
+                  <div key={item.id} className="flex items-center justify-between py-2.5 px-3 border border-border rounded-sm hover:bg-accent-soft/20 transition-all cursor-pointer" onClick={() => setReturnDetail(item)}>
                     <div className="flex items-center gap-3">
                       <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                         item.returnType === 'return_courier' ? 'bg-orange-soft text-orange-status' : 'bg-accent-soft text-accent'
@@ -333,7 +334,8 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
                           api.patch(`/dashboard/followups/${item.id}/returned`)
                             .then(() => {
                               queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
@@ -347,7 +349,7 @@ export default function Dashboard() {
                         הוחזר
                       </button>
                       {item.clientPhone && (
-                        <a href={`tel:${item.clientPhone}`} className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                        <a href={`tel:${item.clientPhone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
                           <Phone className="w-3 h-3" />
                         </a>
                       )}
@@ -682,6 +684,129 @@ export default function Dashboard() {
                     {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return Detail Modal */}
+      {returnDetail && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setReturnDetail(null)}>
+          <div className="bg-surface rounded-lg border border-border shadow-xl w-full max-w-lg mx-4 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <PackageCheck className="w-5 h-5 text-yellow-600" />
+                <h3 className="text-sm font-bold text-text-primary">פרטי החזרה — {returnDetail.clientName}</h3>
+              </div>
+              <button onClick={() => setReturnDetail(null)} className="text-text-tertiary hover:text-text-primary text-lg">&times;</button>
+            </div>
+
+            {/* Details grid */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-bg rounded-sm p-3">
+                <span className="text-text-tertiary block mb-1">סוג החזרה</span>
+                <div className={`flex items-center gap-1.5 font-semibold ${
+                  returnDetail.returnType === 'return_courier' ? 'text-orange-status' : 'text-accent'
+                }`}>
+                  {returnDetail.returnType === 'return_courier' ? <Truck className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+                  {returnDetail.returnType === 'return_courier' ? 'שליח לאיסוף' : 'החזרה לנקודת איסוף'}
+                </div>
+              </div>
+              <div className="bg-bg rounded-sm p-3">
+                <span className="text-text-tertiary block mb-1">מחשב</span>
+                <span className="font-semibold text-text-primary">{returnDetail.computerInternalId}</span>
+                {returnDetail.computerName && <span className="text-text-tertiary mr-1">({returnDetail.computerName})</span>}
+              </div>
+              <div className="bg-bg rounded-sm p-3">
+                <span className="text-text-tertiary block mb-1">טלפון</span>
+                {returnDetail.clientPhone ? (
+                  <a href={`tel:${returnDetail.clientPhone}`} className="font-semibold text-accent hover:underline" dir="ltr">{returnDetail.clientPhone}</a>
+                ) : <span className="text-text-tertiary">-</span>}
+              </div>
+              <div className="bg-bg rounded-sm p-3">
+                <span className="text-text-tertiary block mb-1">אימייל</span>
+                {returnDetail.clientEmail ? (
+                  <a href={`mailto:${returnDetail.clientEmail}`} className="font-semibold text-accent hover:underline" dir="ltr">{returnDetail.clientEmail}</a>
+                ) : <span className="text-text-tertiary">-</span>}
+              </div>
+              {returnDetail.clientAddress && (
+                <div className="bg-bg rounded-sm p-3 col-span-2">
+                  <span className="text-text-tertiary block mb-1">כתובת</span>
+                  <span className="font-semibold text-text-primary">{returnDetail.clientAddress}</span>
+                </div>
+              )}
+              <div className="bg-bg rounded-sm p-3">
+                <span className="text-text-tertiary block mb-1">תאריך צפוי</span>
+                <span className="font-semibold text-text-primary">
+                  {returnDetail.expectedDate ? new Date(returnDetail.expectedDate).toLocaleDateString('he-IL') : 'לא נקבע'}
+                </span>
+              </div>
+              <div className="bg-bg rounded-sm p-3">
+                <span className="text-text-tertiary block mb-1">סטטוס</span>
+                {returnDetail.daysLeft !== null ? (
+                  <span className={`font-semibold ${returnDetail.daysLeft < 0 ? 'text-red-600' : returnDetail.daysLeft === 0 ? 'text-orange-500' : 'text-green-600'}`}>
+                    {returnDetail.daysLeft < 0 ? `באיחור ${Math.abs(returnDetail.daysLeft)} ימים` : returnDetail.daysLeft === 0 ? 'היום' : `עוד ${returnDetail.daysLeft} ימים`}
+                  </span>
+                ) : <span className="text-text-tertiary">ללא תאריך</span>}
+              </div>
+              {returnDetail.answeredAt && (
+                <div className="bg-bg rounded-sm p-3">
+                  <span className="text-text-tertiary block mb-1">תאריך תשובת לקוח</span>
+                  <span className="font-semibold text-text-primary">{new Date(returnDetail.answeredAt).toLocaleString('he-IL')}</span>
+                </div>
+              )}
+              {returnDetail.handledAt && (
+                <div className="bg-bg rounded-sm p-3">
+                  <span className="text-text-tertiary block mb-1">טופל בתאריך</span>
+                  <span className="font-semibold text-text-primary">{new Date(returnDetail.handledAt).toLocaleString('he-IL')}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Last message sent */}
+            {returnDetail.lastMessage && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-text-secondary">הודעה אחרונה שנשלחה</span>
+                  {returnDetail.lastMessageDate && (
+                    <span className="text-xs text-text-tertiary">{new Date(returnDetail.lastMessageDate).toLocaleString('he-IL')}</span>
+                  )}
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded-sm p-3 text-sm text-text-primary whitespace-pre-wrap leading-relaxed" dir="rtl">
+                  {returnDetail.lastMessage}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 justify-between pt-2 border-t border-border">
+              <button
+                onClick={() => setReturnDetail(null)}
+                className="px-4 py-2 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all"
+              >
+                סגור
+              </button>
+              <div className="flex gap-2">
+                {returnDetail.clientPhone && (
+                  <a href={`tel:${returnDetail.clientPhone}`} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                    <Phone className="w-3.5 h-3.5" /> התקשר
+                  </a>
+                )}
+                <button
+                  onClick={() => {
+                    api.patch(`/dashboard/followups/${returnDetail.id}/returned`)
+                      .then(() => {
+                        queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+                        toast.success('המחשב סומן כהוחזר — ממתין לניקוי')
+                        setReturnDetail(null)
+                      })
+                      .catch(() => toast.error('שגיאה'))
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> סמן כהוחזר
+                </button>
               </div>
             </div>
           </div>

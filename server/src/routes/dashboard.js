@@ -166,17 +166,36 @@ router.get('/summary', async (req, res, next) => {
         computerInternalId: r.rental.computer.internalId,
         rentalId: r.rentalId,
       })),
-      pendingReturns: pendingReturns.map(f => ({
-        id: f.id,
-        returnType: f.returnType,
-        expectedDate: f.expectedDate,
-        createdAt: f.createdAt,
-        clientName: f.rental.client.name,
-        clientPhone: f.rental.client.phone,
-        computerInternalId: f.rental.computer.internalId,
-        computerId: f.rental.computerId,
-        rentalId: f.rentalId,
-        daysLeft: f.expectedDate ? Math.ceil((new Date(f.expectedDate) - new Date()) / (1000 * 60 * 60 * 24)) : null,
+      pendingReturns: await Promise.all(pendingReturns.map(async f => {
+        // Get last WhatsApp message for this rental
+        const lastMessage = await prisma.whatsAppLog.findFirst({
+          where: { rentalId: f.rentalId },
+          orderBy: { createdAt: 'desc' },
+        });
+        // Get the handled response that created this followup
+        const handledResponse = await prisma.rentalResponse.findFirst({
+          where: { rentalId: f.rentalId, handled: true, choice: { in: ['return_pickup', 'return_courier'] } },
+          orderBy: { handledAt: 'desc' },
+        });
+        return {
+          id: f.id,
+          returnType: f.returnType,
+          expectedDate: f.expectedDate,
+          createdAt: f.createdAt,
+          clientName: f.rental.client.name,
+          clientPhone: f.rental.client.phone,
+          clientEmail: f.rental.client.email,
+          clientAddress: f.rental.client.address,
+          computerInternalId: f.rental.computer.internalId,
+          computerName: `${f.rental.computer.brand} ${f.rental.computer.model}`,
+          computerId: f.rental.computerId,
+          rentalId: f.rentalId,
+          daysLeft: f.expectedDate ? Math.ceil((new Date(f.expectedDate) - new Date()) / (1000 * 60 * 60 * 24)) : null,
+          lastMessage: lastMessage?.message || null,
+          lastMessageDate: lastMessage?.createdAt || null,
+          answeredAt: handledResponse?.answeredAt || null,
+          handledAt: handledResponse?.handledAt || null,
+        };
       })),
     });
   } catch (err) {
