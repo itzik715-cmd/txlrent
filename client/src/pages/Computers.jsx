@@ -109,7 +109,9 @@ export default function Computers() {
 
   // Helper to get value for a column key from a row
   const getColValue = (row, key) => {
-    if (key === 'specs') return [row.specs?.cpu, row.specs?.ram, row.specs?.storage].filter(Boolean).join(' | ')
+    if (key === 'cpu') return row.specs?.cpu || ''
+    if (key === 'ram') return row.specs?.ram || ''
+    if (key === 'storage') return row.specs?.storage || ''
     if (key === 'tier') return row.tier ? `רמה ${row.tier}` : ''
     return row[key] || ''
   }
@@ -176,17 +178,9 @@ export default function Computers() {
     { key: 'internalId', label: 'מזהה', filterable: true },
     { key: 'brand', label: 'מותג', filterable: true },
     { key: 'model', label: 'דגם', filterable: true },
-    {
-      key: 'specs',
-      label: 'מפרט',
-      filterable: true,
-      render: (_, row) => {
-        const parts = [row.specs?.cpu, row.specs?.ram, row.specs?.storage].filter(Boolean)
-        return parts.length > 0
-          ? <span className="text-xs text-text-secondary">{parts.join(' | ')}</span>
-          : <span className="text-xs text-text-tertiary">-</span>
-      },
-    },
+    { key: 'cpu', label: 'מעבד', filterable: true, render: (_, row) => row.specs?.cpu || '-' },
+    { key: 'ram', label: 'זכרון', filterable: true, render: (_, row) => row.specs?.ram || '-' },
+    { key: 'storage', label: 'דיסק', filterable: true, render: (_, row) => row.specs?.storage || '-' },
     {
       key: 'tier',
       label: 'רמה',
