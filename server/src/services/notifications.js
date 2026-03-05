@@ -120,7 +120,7 @@ async function sendEmail(to, subject, body) {
   }
 }
 
-const RESPONSE_BASE_URL = 'https://5-100-255-162.cloud-xip.io';
+const RESPONSE_BASE_URL = 'https://rent.txlcomp.co.il';
 
 function getResponseUrl(token) {
   return `${RESPONSE_BASE_URL}/r/${token}`;

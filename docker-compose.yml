@@ -30,11 +30,13 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ssl-certs:/etc/nginx/ssl
+      - certbot-certs:/etc/nginx/ssl
+      - certbot-webroot:/var/www/certbot
     depends_on:
       - backend
     restart: unless-stopped
 
 volumes:
   pgdata:
-  ssl-certs:
+  certbot-certs:
+  certbot-webroot:

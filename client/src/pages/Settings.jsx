@@ -243,7 +243,7 @@ function TemplatesConfig({ settings }) {
               .replace(/\{daysLeft\}/g, '3')
               .replace(/\{expectedReturn\}/g, '08/03/2026')
               .replace(/\{senderName\}/g, settings.wa_sender_name || 'LapTrack')
-              .replace(/\{responseUrl\}/g, 'https://5.100.255.162/r/abc123')}
+              .replace(/\{responseUrl\}/g, 'https://rent.txlcomp.co.il/r/abc123')}
           </div>
         </div>
 
@@ -498,7 +498,7 @@ function RuleEditor({ rule, onClose, senderName }) {
             .replace(/\{daysLeft\}/g, String(form.dayOffset || 0))
             .replace(/\{expectedReturn\}/g, '08/03/2026')
             .replace(/\{senderName\}/g, senderName)
-            .replace(/\{responseUrl\}/g, 'https://5.100.255.162/r/abc123')}
+            .replace(/\{responseUrl\}/g, 'https://rent.txlcomp.co.il/r/abc123')}
         </div>
       </div>
 
