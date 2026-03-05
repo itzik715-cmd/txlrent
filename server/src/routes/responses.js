@@ -82,6 +82,20 @@ router.post('/:token', async (req, res, next) => {
       },
     });
 
+    // Mark all other unanswered responses for the same rental as answered
+    await prisma.rentalResponse.updateMany({
+      where: {
+        rentalId: response.rentalId,
+        answered: false,
+        id: { not: response.id },
+      },
+      data: {
+        choice,
+        answered: true,
+        answeredAt: new Date(),
+      },
+    });
+
     res.json({ success: true, choice: updated.choice });
   } catch (err) {
     next(err);

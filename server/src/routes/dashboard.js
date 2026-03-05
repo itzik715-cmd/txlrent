@@ -68,14 +68,20 @@ router.get('/summary', async (req, res, next) => {
       },
     });
 
-    const pendingAlerts = await prisma.rentalResponse.findMany({
+    // Pending alerts — deduplicate by rental (show only latest per rental)
+    const allPendingAlerts = await prisma.rentalResponse.findMany({
       where: { answered: false },
       orderBy: { createdAt: 'desc' },
-      take: 20,
       include: {
         rental: { include: { client: true, computer: true } },
       },
     });
+    const seenRentals = new Set();
+    const pendingAlerts = allPendingAlerts.filter(r => {
+      if (seenRentals.has(r.rentalId)) return false;
+      seenRentals.add(r.rentalId);
+      return true;
+    }).slice(0, 20);
 
     // Pending return follow-ups
     const pendingReturns = await prisma.returnFollowup.findMany({
