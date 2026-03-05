@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Send, MessageCircle, Clock, FileText, Info, CheckCircle2, XCircle, RefreshCw, Plus, Trash2 } from 'lucide-react'
+import { Save, Send, MessageCircle, Clock, FileText, Info, CheckCircle2, XCircle, RefreshCw, Plus, Trash2, Users, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 
@@ -11,6 +11,7 @@ const tabs = [
   { key: 'logs', label: 'יומן שליחות', icon: Send },
   { key: 'responses', label: 'תגובות לקוחות', icon: CheckCircle2 },
   { key: 'guide', label: 'מדריך חיבור', icon: Info },
+  { key: 'users', label: 'משתמשים', icon: Users },
 ]
 
 const formatDate = (d) => d ? new Date(d).toLocaleString('he-IL') : '-'
@@ -54,6 +55,7 @@ export default function Settings() {
       {activeTab === 'logs' && <LogsView />}
       {activeTab === 'responses' && <ResponsesView />}
       {activeTab === 'guide' && <SetupGuide />}
+      {activeTab === 'users' && <UsersManagement />}
     </div>
   )
 }
@@ -675,6 +677,163 @@ function SetupGuide() {
           </ul>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ─── Users Management ─── */
+function UsersManagement() {
+  const queryClient = useQueryClient()
+  const [editUser, setEditUser] = useState(null)
+  const [showNew, setShowNew] = useState(false)
+  const [form, setForm] = useState({ email: '', password: '', name: '', role: 'user' })
+
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ['settings-users'],
+    queryFn: () => api.get('/settings/users').then(r => r.data),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data) => api.post('/settings/users', data).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings-users'] })
+      toast.success('משתמש נוצר')
+      setShowNew(false)
+      setForm({ email: '', password: '', name: '', role: 'user' })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה ביצירת משתמש'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }) => api.put(`/settings/users/${id}`, data).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings-users'] })
+      toast.success('משתמש עודכן')
+      setEditUser(null)
+      setForm({ email: '', password: '', name: '', role: 'user' })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בעדכון'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/settings/users/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings-users'] })
+      toast.success('משתמש נמחק')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה במחיקה'),
+  })
+
+  const startEdit = (user) => {
+    setEditUser(user.id)
+    setForm({ email: user.email, name: user.name, role: user.role, password: '' })
+    setShowNew(false)
+  }
+
+  const startNew = () => {
+    setShowNew(true)
+    setEditUser(null)
+    setForm({ email: '', password: '', name: '', role: 'user' })
+  }
+
+  const cancelEdit = () => {
+    setEditUser(null)
+    setShowNew(false)
+    setForm({ email: '', password: '', name: '', role: 'user' })
+  }
+
+  if (isLoading) return <p className="text-text-tertiary text-sm py-4">טוען...</p>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-text-primary">ניהול משתמשים</h2>
+        <button onClick={startNew} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all">
+          <Plus className="w-3.5 h-3.5" />
+          משתמש חדש
+        </button>
+      </div>
+
+      {/* Users list */}
+      <div className="border border-border rounded-sm divide-y divide-border">
+        {users.map(user => (
+          <div key={user.id} className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <span className="text-sm font-semibold text-text-primary">{user.name}</span>
+                <span className="text-xs text-text-tertiary mr-2">{user.email}</span>
+              </div>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-gray-100 text-gray-600'}`}>
+                {user.role === 'admin' ? 'מנהל' : 'משתמש'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => startEdit(user)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                <Pencil className="w-3 h-3" />
+                עריכה
+              </button>
+              <button
+                onClick={() => { if (confirm('למחוק משתמש זה?')) deleteMutation.mutate(user.id) }}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-border rounded-sm hover:border-red-500 hover:text-red-500 transition-all"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Edit / New form */}
+      {(editUser || showNew) && (
+        <div className="border border-accent/30 rounded-sm p-4 bg-accent-soft/20 space-y-3">
+          <h3 className="text-sm font-bold text-text-primary">{showNew ? 'משתמש חדש' : 'עריכת משתמש'}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">שם</label>
+              <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">אימייל</label>
+              <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent" dir="ltr" />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">{editUser ? 'סיסמה חדשה (השאר ריק לשמור)' : 'סיסמה'}</label>
+              <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent" dir="ltr" />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary block mb-1">תפקיד</label>
+              <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm focus:outline-none focus:border-accent">
+                <option value="admin">מנהל</option>
+                <option value="user">משתמש</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={cancelEdit} className="px-3 py-1.5 text-xs font-medium border border-border rounded-sm hover:border-accent hover:text-accent transition-all">ביטול</button>
+            <button
+              onClick={() => {
+                if (showNew) {
+                  if (!form.email || !form.password || !form.name) return toast.error('נא למלא את כל השדות')
+                  createMutation.mutate(form)
+                } else {
+                  const data = { id: editUser, email: form.email, name: form.name, role: form.role }
+                  if (form.password) data.password = form.password
+                  updateMutation.mutate(data)
+                }
+              }}
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {showNew ? 'צור משתמש' : 'שמור שינויים'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
