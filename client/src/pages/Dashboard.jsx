@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -16,6 +17,8 @@ import {
   CheckCircle2,
   Truck,
   RefreshCw,
+  Send,
+  X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
@@ -38,6 +41,9 @@ const daysRemaining = (d) => {
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [resendPreview, setResendPreview] = useState(null) // { rentalId, phone, clientName, message }
+  const [resendMessage, setResendMessage] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
 
   const handleMutation = useMutation({
     mutationFn: (id) => api.patch(`/dashboard/responses/${id}/handle`),
@@ -46,6 +52,31 @@ export default function Dashboard() {
       toast.success('סומן כטופל')
     },
   })
+
+  const sendCustomMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-custom', data).then(r => r.data),
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success('הודעת WhatsApp נשלחה')
+        setResendPreview(null)
+        setResendMessage('')
+      } else toast.error(data.reason || 'שליחה נכשלה')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
+  })
+
+  const openResendPreview = async (item) => {
+    setResendLoading(true)
+    try {
+      const { data } = await api.post(`/whatsapp/prepare-alert/${item.rentalId}`)
+      setResendMessage(data.message)
+      setResendPreview({ rentalId: item.rentalId, phone: item.clientPhone, clientName: item.clientName })
+    } catch {
+      toast.error('שגיאה בטעינת תבנית')
+    } finally {
+      setResendLoading(false)
+    }
+  }
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ['dashboard-summary'],
@@ -177,6 +208,14 @@ export default function Dashboard() {
                         <span className="text-xs text-text-tertiary">
                           {sentAgo === 0 ? 'נשלח היום' : `לפני ${sentAgo} ימים`}
                         </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openResendPreview(item) }}
+                          disabled={resendLoading}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+                        >
+                          <Send className="w-3 h-3" />
+                          שלח שוב
+                        </button>
                         <a href={`tel:${item.clientPhone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
                           <Phone className="w-3 h-3" />
                         </a>
@@ -298,6 +337,47 @@ export default function Dashboard() {
         <QuickAction icon={<RotateCcw className="w-4 h-4" />} label="קבל החזרה" onClick={() => navigate('/rentals')} />
         <QuickAction icon={<CreditCard className="w-4 h-4" />} label="רשום תשלום" onClick={() => navigate('/billing')} />
       </div>
+
+      {/* Resend WhatsApp Preview Modal */}
+      {resendPreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setResendPreview(null); setResendMessage('') }}>
+          <div className="bg-surface rounded-lg border border-border shadow-xl w-full max-w-lg mx-4 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-green-600" />
+                <h3 className="text-sm font-bold text-text-primary">שלח שוב — {resendPreview.clientName}</h3>
+                <span className="text-xs text-text-tertiary">({resendPreview.phone})</span>
+              </div>
+              <button onClick={() => { setResendPreview(null); setResendMessage('') }} className="text-text-tertiary hover:text-text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <textarea
+              value={resendMessage}
+              onChange={(e) => setResendMessage(e.target.value)}
+              rows={10}
+              dir="rtl"
+              className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent transition-all duration-150 resize-y leading-relaxed"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setResendPreview(null); setResendMessage('') }}
+                className="px-4 py-2 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={() => sendCustomMutation.mutate({ phone: resendPreview.phone, message: resendMessage })}
+                disabled={!resendMessage.trim() || sendCustomMutation.isPending}
+                className="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
