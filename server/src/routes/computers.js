@@ -20,7 +20,7 @@ const computerSchema = z.object({
 // GET /api/computers — list with filters, paginated
 router.get('/', async (req, res, next) => {
   try {
-    const { status, search, page = 1, limit = 50 } = req.query;
+    const { status, search, page = 1, limit = 500 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};

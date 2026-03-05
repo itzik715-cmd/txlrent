@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // GET /api/rentals — list with filter
 router.get('/', async (req, res, next) => {
   try {
-    const { status, page = 1, limit = 50 } = req.query;
+    const { status, page = 1, limit = 500 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
