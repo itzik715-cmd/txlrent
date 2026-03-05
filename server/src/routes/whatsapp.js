@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
-const { sendWhatsApp, getWhatsAppSettings, getResponseUrl } = require('../services/notifications');
+const { sendWhatsApp, sendEmail, getWhatsAppSettings, getResponseUrl } = require('../services/notifications');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -85,7 +85,7 @@ router.post('/prepare-alert/:rentalId', async (req, res, next) => {
       .replace(/\{senderName\}/g, senderName)
       .replace(/\{responseUrl\}/g, responseUrl);
 
-    res.json({ message, phone: rental.client.phone });
+    res.json({ message, phone: rental.client.phone, email: rental.client.email });
   } catch (err) {
     next(err);
   }
@@ -160,6 +160,35 @@ router.post('/send-custom', async (req, res, next) => {
       data: {
         clientId: clientId || null,
         phone,
+        message,
+        status: result.sent ? 'SENT' : 'FAILED',
+        response: result.sent ? null : (result.reason || null),
+      },
+    });
+
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/whatsapp/send-email — send email to a client
+router.post('/send-email', async (req, res, next) => {
+  try {
+    const { email, subject, message, clientId } = req.body;
+    if (!email || !message) {
+      return res.status(400).json({ error: 'חסר אימייל או הודעה' });
+    }
+
+    // Convert plain text to HTML (preserve line breaks)
+    const html = message.replace(/\n/g, '<br>');
+    const result = await sendEmail(email, subject || 'הודעה מ-LapTrack', html);
+
+    // Log
+    await prisma.whatsAppLog.create({
+      data: {
+        clientId: clientId || null,
+        phone: email,
         message,
         status: result.sent ? 'SENT' : 'FAILED',
         response: result.sent ? null : (result.reason || null),

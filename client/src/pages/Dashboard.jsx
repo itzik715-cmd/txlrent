@@ -429,8 +429,11 @@ export default function Dashboard() {
               {debtReminder.clientEmail && (
                 <button
                   onClick={() => {
-                    api.post('/whatsapp/send-custom', { phone: debtReminder.clientEmail, message: debtMessage, clientId: debtReminder.clientId })
-                      .then(() => { toast.success('אימייל נשלח (בקרוב)'); setDebtReminder(null); setDebtMessage('') })
+                    api.post('/whatsapp/send-email', { email: debtReminder.clientEmail, subject: 'תזכורת חוב - LapTrack', message: debtMessage, clientId: debtReminder.clientId })
+                      .then((res) => {
+                        if (res.data.sent) { toast.success('אימייל נשלח ללקוח'); setDebtReminder(null); setDebtMessage('') }
+                        else toast.error(res.data.reason || 'שליחת אימייל נכשלה')
+                      })
                       .catch(() => toast.error('שליחת אימייל נכשלה'))
                   }}
                   disabled={!debtMessage.trim()}

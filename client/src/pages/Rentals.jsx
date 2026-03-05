@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User, MessageCircle, Monitor } from 'lucide-react'
+import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User, MessageCircle, Monitor, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -279,6 +279,7 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
   const [addCompSearch, setAddCompSearch] = useState('')
   const [showAlertPreview, setShowAlertPreview] = useState(false)
   const [alertMessage, setAlertMessage] = useState('')
+  const [alertEmail, setAlertEmail] = useState('')
   const [alertLoading, setAlertLoading] = useState(false)
 
   const invalidateAll = () => {
@@ -320,11 +321,24 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
   })
 
+  const sendEmailMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-email', data).then(r => r.data),
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success('אימייל נשלח ללקוח')
+        setShowAlertPreview(false)
+        setAlertMessage('')
+      } else toast.error(data.reason || 'שליחת אימייל נכשלה')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחת אימייל'),
+  })
+
   const openAlertPreview = async () => {
     setAlertLoading(true)
     try {
       const { data } = await api.post(`/whatsapp/prepare-alert/${rental.id}`)
       setAlertMessage(data.message)
+      setAlertEmail(data.email || '')
       setShowAlertPreview(true)
     } catch {
       toast.error('שגיאה בטעינת תבנית')
@@ -652,13 +666,14 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
             </div>
           )}
 
-          {/* WhatsApp Alert Preview */}
+          {/* Alert Preview (WhatsApp + Email) */}
           {showAlertPreview && (
             <div className="border border-green-300 rounded-sm p-4 mt-3 bg-green-50 space-y-3">
               <div className="flex items-center gap-2">
                 <MessageCircle className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-bold text-text-primary">תצוגה מקדימה — WhatsApp ל-{rental.client?.name || rental.clientName}</span>
+                <span className="text-sm font-bold text-text-primary">תצוגה מקדימה — {rental.client?.name || rental.clientName}</span>
                 <span className="text-xs text-text-tertiary">({rental.client?.phone})</span>
+                {alertEmail && <span className="text-xs text-text-tertiary">| {alertEmail}</span>}
               </div>
               <textarea
                 value={alertMessage}
@@ -674,6 +689,21 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
                 >
                   ביטול
                 </button>
+                {alertEmail && (
+                  <button
+                    onClick={() => sendEmailMutation.mutate({
+                      email: alertEmail,
+                      subject: 'התראת השכרה - LapTrack',
+                      message: alertMessage,
+                      clientId: rental.clientId,
+                    })}
+                    disabled={!alertMessage.trim() || sendEmailMutation.isPending}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                  >
+                    <Mail className="w-3 h-3" />
+                    {sendEmailMutation.isPending ? 'שולח...' : 'שלח אימייל'}
+                  </button>
+                )}
                 <button
                   onClick={() => sendCustomMutation.mutate({
                     phone: rental.client?.phone,
@@ -712,11 +742,22 @@ function ClientGroupDetail({ group, clients, availableComputers, onClose, onOpen
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
   })
 
+  const sendEmailMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-email', data).then(r => r.data),
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success('אימייל נשלח ללקוח')
+        setAlertPreview(null)
+      } else toast.error(data.reason || 'שליחת אימייל נכשלה')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחת אימייל'),
+  })
+
   const openAlertPreview = async (rental) => {
     setAlertLoading(rental.id)
     try {
       const { data } = await api.post(`/whatsapp/prepare-alert/${rental.id}`)
-      setAlertPreview({ rentalId: rental.id, message: data.message, phone: rental.client?.phone })
+      setAlertPreview({ rentalId: rental.id, message: data.message, phone: rental.client?.phone, email: data.email || rental.client?.email })
     } catch {
       toast.error('שגיאה בטעינת תבנית')
     } finally {
@@ -847,13 +888,14 @@ function ClientGroupDetail({ group, clients, availableComputers, onClose, onOpen
         </div>
       )}
 
-      {/* WhatsApp Alert Preview */}
+      {/* Alert Preview (WhatsApp + Email) */}
       {alertPreview && (
         <div className="border border-green-300 rounded-sm p-4 mt-3 bg-green-50 space-y-3">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-bold text-text-primary">תצוגה מקדימה — WhatsApp ל-{group.clientName}</span>
+            <span className="text-sm font-bold text-text-primary">תצוגה מקדימה — {group.clientName}</span>
             <span className="text-xs text-text-tertiary">({alertPreview.phone})</span>
+            {alertPreview.email && <span className="text-xs text-text-tertiary">| {alertPreview.email}</span>}
           </div>
           <textarea
             value={alertPreview.message}
@@ -869,6 +911,21 @@ function ClientGroupDetail({ group, clients, availableComputers, onClose, onOpen
             >
               ביטול
             </button>
+            {alertPreview.email && (
+              <button
+                onClick={() => sendEmailMutation.mutate({
+                  email: alertPreview.email,
+                  subject: 'התראת השכרה - LapTrack',
+                  message: alertPreview.message,
+                  clientId: group.clientId,
+                })}
+                disabled={!alertPreview.message.trim() || sendEmailMutation.isPending}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+              >
+                <Mail className="w-3 h-3" />
+                {sendEmailMutation.isPending ? 'שולח...' : 'שלח אימייל'}
+              </button>
+            )}
             <button
               onClick={() => sendCustomMutation.mutate({
                 phone: alertPreview.phone,

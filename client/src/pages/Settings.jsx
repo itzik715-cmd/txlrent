@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Send, MessageCircle, Clock, FileText, Info, CheckCircle2, XCircle, RefreshCw, Plus, Trash2, Users, Pencil } from 'lucide-react'
+import { Save, Send, MessageCircle, Clock, FileText, Info, CheckCircle2, XCircle, RefreshCw, Plus, Trash2, Users, Pencil, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 
 const tabs = [
   { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { key: 'email', label: 'אימייל', icon: Mail },
   { key: 'templates', label: 'תבניות הודעה', icon: FileText },
   { key: 'alerts', label: 'התראות אוטומטיות', icon: Clock },
   { key: 'logs', label: 'יומן שליחות', icon: Send },
@@ -50,6 +51,7 @@ export default function Settings() {
       </div>
 
       {activeTab === 'whatsapp' && <WhatsAppConfig settings={settings} />}
+      {activeTab === 'email' && <EmailConfig settings={settings} />}
       {activeTab === 'templates' && <TemplatesConfig settings={settings} />}
       {activeTab === 'alerts' && <AlertsConfig settings={settings} />}
       {activeTab === 'logs' && <LogsView />}
@@ -185,6 +187,130 @@ function WhatsAppConfig({ settings }) {
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
           >
             <Send className="w-3.5 h-3.5" />
+            {sendTestMutation.isPending ? 'שולח...' : 'שלח בדיקה'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Email Config ─── */
+function EmailConfig({ settings }) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({
+    email_enabled: settings.email_enabled || 'false',
+    email_smtp_host: settings.email_smtp_host || '',
+    email_smtp_port: settings.email_smtp_port || '587',
+    email_smtp_user: settings.email_smtp_user || '',
+    email_smtp_pass: settings.email_smtp_pass || '',
+    email_from: settings.email_from || '',
+    email_from_name: settings.email_from_name || 'LapTrack',
+    email_smtp_secure: settings.email_smtp_secure || 'false',
+  })
+  const [testEmail, setTestEmail] = useState('')
+
+  const saveMutation = useMutation({
+    mutationFn: (data) => api.put('/settings', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      toast.success('הגדרות האימייל נשמרו')
+    },
+    onError: () => toast.error('שגיאה בשמירה'),
+  })
+
+  const sendTestMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-email', data),
+    onSuccess: (res) => {
+      if (res.data.sent) toast.success('אימייל בדיקה נשלח בהצלחה!')
+      else toast.error(`שליחה נכשלה: ${res.data.reason}`)
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
+  })
+
+  const inputClass = "w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-surface border border-border rounded-lg p-5 space-y-4">
+        <h2 className="text-sm font-bold text-text-primary flex items-center gap-2">
+          <Mail className="w-4 h-4 text-accent" />
+          הגדרות SMTP לשליחת אימייל
+        </h2>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.email_enabled === 'true'}
+            onChange={(e) => setForm(f => ({ ...f, email_enabled: e.target.checked ? 'true' : 'false' }))}
+            className="w-4 h-4 rounded border-border text-accent focus:ring-accent"
+          />
+          <span className="text-sm font-medium text-text-secondary">הפעל שליחת אימייל</span>
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">SMTP Host</label>
+            <input value={form.email_smtp_host} onChange={e => setForm(f => ({ ...f, email_smtp_host: e.target.value }))} placeholder="smtp.gmail.com" className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">SMTP Port</label>
+            <input value={form.email_smtp_port} onChange={e => setForm(f => ({ ...f, email_smtp_port: e.target.value }))} placeholder="587" className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">שם משתמש SMTP</label>
+            <input value={form.email_smtp_user} onChange={e => setForm(f => ({ ...f, email_smtp_user: e.target.value }))} placeholder="user@gmail.com" className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">סיסמת SMTP</label>
+            <input type="password" value={form.email_smtp_pass} onChange={e => setForm(f => ({ ...f, email_smtp_pass: e.target.value }))} placeholder="••••••" className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">אימייל שולח (From)</label>
+            <input value={form.email_from} onChange={e => setForm(f => ({ ...f, email_from: e.target.value }))} placeholder="noreply@company.com" className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">שם שולח</label>
+            <input value={form.email_from_name} onChange={e => setForm(f => ({ ...f, email_from_name: e.target.value }))} placeholder="LapTrack" className={inputClass} />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.email_smtp_secure === 'true'}
+            onChange={(e) => setForm(f => ({ ...f, email_smtp_secure: e.target.checked ? 'true' : 'false' }))}
+            className="w-4 h-4 rounded border-border text-accent focus:ring-accent"
+          />
+          <span className="text-xs font-medium text-text-secondary">SSL/TLS (port 465)</span>
+        </label>
+
+        <button
+          onClick={() => saveMutation.mutate(form)}
+          disabled={saveMutation.isPending}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+        >
+          <Save className="w-3.5 h-3.5" />
+          {saveMutation.isPending ? 'שומר...' : 'שמור הגדרות'}
+        </button>
+      </div>
+
+      {/* Test Email */}
+      <div className="bg-surface border border-border rounded-lg p-5 space-y-3">
+        <h2 className="text-sm font-bold text-text-primary">שלח אימייל בדיקה</h2>
+        <div className="flex gap-3">
+          <input
+            value={testEmail}
+            onChange={e => setTestEmail(e.target.value)}
+            placeholder="test@example.com"
+            className={inputClass + " max-w-[250px]"}
+          />
+          <button
+            onClick={() => sendTestMutation.mutate({ email: testEmail, subject: 'בדיקת חיבור - LapTrack', message: 'הודעת בדיקה מ-LapTrack. אם קיבלת הודעה זו, החיבור תקין!' })}
+            disabled={!testEmail || sendTestMutation.isPending}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+          >
+            <Mail className="w-3.5 h-3.5" />
             {sendTestMutation.isPending ? 'שולח...' : 'שלח בדיקה'}
           </button>
         </div>

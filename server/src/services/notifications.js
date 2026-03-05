@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const nodemailer = require('nodemailer');
 const prisma = new PrismaClient();
 
 // Get all WhatsApp settings from DB
@@ -100,18 +101,53 @@ async function sendViaTwilio(phone, message) {
   }
 }
 
-async function sendEmail(to, subject, body) {
-  const { SENDGRID_API_KEY, SENDGRID_FROM_EMAIL } = process.env;
+async function getEmailSettings() {
+  const keys = [
+    'email_enabled', 'email_smtp_host', 'email_smtp_port',
+    'email_smtp_user', 'email_smtp_pass', 'email_from', 'email_from_name',
+    'email_smtp_secure',
+  ];
+  const settings = await prisma.setting.findMany({ where: { key: { in: keys } } });
+  const map = {};
+  for (const s of settings) map[s.key] = s.value;
+  return map;
+}
 
-  if (!SENDGRID_API_KEY || !SENDGRID_FROM_EMAIL) {
-    console.log(`[Email] Skipped (no credentials). To: ${to}, Subject: ${subject}`);
-    return { sent: false, reason: 'missing credentials' };
+async function sendEmail(to, subject, body) {
+  const settings = await getEmailSettings();
+
+  if (settings.email_enabled !== 'true') {
+    console.log(`[Email] Disabled. To: ${to}, Subject: ${subject}`);
+    return { sent: false, reason: 'Email disabled' };
+  }
+
+  const host = settings.email_smtp_host;
+  const port = parseInt(settings.email_smtp_port || '587');
+  const user = settings.email_smtp_user;
+  const pass = settings.email_smtp_pass;
+  const from = settings.email_from || user;
+  const fromName = settings.email_from_name || 'LapTrack';
+
+  if (!host || !user || !pass) {
+    console.log(`[Email] Missing SMTP settings. To: ${to}`);
+    return { sent: false, reason: 'Missing SMTP settings' };
   }
 
   try {
-    const sgMail = require('@sendgrid/mail');
-    sgMail.setApiKey(SENDGRID_API_KEY);
-    await sgMail.send({ to, from: SENDGRID_FROM_EMAIL, subject, html: body });
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: settings.email_smtp_secure === 'true' || port === 465,
+      auth: { user, pass },
+    });
+
+    await transporter.sendMail({
+      from: `"${fromName}" <${from}>`,
+      to,
+      subject,
+      html: body,
+    });
+
     console.log(`[Email] Sent to ${to}: ${subject}`);
     return { sent: true };
   } catch (err) {
