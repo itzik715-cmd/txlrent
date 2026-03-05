@@ -765,6 +765,18 @@ function ClientGroupDetail({ group, clients, availableComputers, onClose, onOpen
     }
   }
 
+  const openCombinedAlert = async () => {
+    setAlertLoading('combined')
+    try {
+      const { data } = await api.post('/whatsapp/prepare-combined-alert', { clientId: group.clientId })
+      setAlertPreview({ rentalId: 'combined', message: data.message, phone: data.phone, email: data.email })
+    } catch {
+      toast.error('שגיאה בטעינת תבנית')
+    } finally {
+      setAlertLoading(null)
+    }
+  }
+
   const totalPrice = group.rentals.reduce((s, r) => s + (Number(r.priceMonthly) || 0), 0)
   const activeRentals = group.rentals.filter(r => r.status === 'ACTIVE' || r.status === 'OVERDUE')
   const returnedRentals = group.rentals.filter(r => r.status === 'RETURNED')
@@ -793,6 +805,16 @@ function ClientGroupDetail({ group, clients, availableComputers, onClose, onOpen
           <CreditCard className="w-3.5 h-3.5" />
           סה"כ: {formatCurrency(totalPrice)}/חודש
         </div>
+        {activeRentals.length > 0 && (
+          <button
+            onClick={openCombinedAlert}
+            disabled={alertLoading === 'combined'}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-green-600 rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50 mr-auto"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            {alertLoading === 'combined' ? 'טוען...' : 'שלח התראה כוללת'}
+          </button>
+        )}
       </div>
 
       {/* Active rentals */}

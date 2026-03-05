@@ -91,6 +91,71 @@ router.post('/prepare-alert/:rentalId', async (req, res, next) => {
   }
 });
 
+// POST /api/whatsapp/prepare-combined-alert — prepare combined alert for all active rentals of a client
+router.post('/prepare-combined-alert', async (req, res, next) => {
+  try {
+    const { clientId, rentalIds } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'חסר מזהה לקוח' });
+
+    const where = {
+      clientId,
+      status: { in: ['ACTIVE', 'OVERDUE'] },
+    };
+    if (rentalIds && rentalIds.length > 0) {
+      where.id = { in: rentalIds };
+    }
+
+    const rentals = await prisma.rental.findMany({
+      where,
+      include: { client: true, computer: true },
+    });
+
+    if (rentals.length === 0) return res.status(404).json({ error: 'לא נמצאו השכרות פעילות' });
+
+    const client = rentals[0].client;
+    const settings = await getWhatsAppSettings();
+    const senderName = settings.wa_sender_name || 'LapTrack';
+    const clientName = client.contactName || client.name;
+
+    // Create one response token per rental
+    const computerLines = [];
+    const responseUrls = [];
+    for (const rental of rentals) {
+      const token = crypto.randomBytes(16).toString('hex');
+      await prisma.rentalResponse.create({
+        data: { token, rentalId: rental.id },
+      });
+      const responseUrl = getResponseUrl(token);
+      responseUrls.push(responseUrl);
+
+      const daysLeft = rental.expectedReturn
+        ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
+        : null;
+
+      const returnInfo = rental.recurring
+        ? 'חודשי מתחדש'
+        : rental.expectedReturn
+          ? `עד ${new Date(rental.expectedReturn).toLocaleDateString('he-IL')}${daysLeft !== null ? ` (עוד ${daysLeft} ימים)` : ''}`
+          : '';
+
+      computerLines.push(`• ${rental.computer.internalId} (${rental.computer.brand} ${rental.computer.model}) — ${returnInfo}`);
+    }
+
+    const totalPrice = rentals.reduce((s, r) => s + (Number(r.priceMonthly) || 0), 0);
+
+    const message = `היי ${clientName}, כאן ${senderName} ממחלקת התפעול\n` +
+      `להלן סיכום המחשבים המושכרים אצלך:\n\n` +
+      computerLines.join('\n') +
+      `\n\nסה"כ חודשי: ${totalPrice.toLocaleString('he-IL')} ₪` +
+      `\n\nלכל מחשב ניתן לבחור: חידוש / החזרה / שליח לאיסוף\n` +
+      responseUrls.map((url, i) => `${rentals[i].computer.internalId}: ${url}`).join('\n');
+
+    res.json({ message, phone: client.phone, email: client.email });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/whatsapp/send-rental-alert/:rentalId — send expiring rental alert
 router.post('/send-rental-alert/:rentalId', async (req, res, next) => {
   try {

@@ -81,7 +81,8 @@ async function processRule(rule, senderName) {
     });
   }
 
-  let sentCount = 0;
+  // Group rentals by client to send one combined message per client
+  const byClient = {};
   for (const rental of rentals) {
     // Skip if already sent for this rule+rental today
     const alreadySent = await prisma.whatsAppLog.findFirst({
@@ -94,43 +95,85 @@ async function processRule(rule, senderName) {
     });
     if (alreadySent) continue;
 
-    // Create response token
-    const token = crypto.randomBytes(16).toString('hex');
-    await prisma.rentalResponse.create({
-      data: { token, rentalId: rental.id },
-    });
+    if (!byClient[rental.clientId]) {
+      byClient[rental.clientId] = { client: rental.client, rentals: [] };
+    }
+    byClient[rental.clientId].rentals.push(rental);
+  }
 
-    const responseUrl = getResponseUrl(token);
-    const daysLeft = rental.expectedReturn
-      ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
-      : null;
+  let sentCount = 0;
+  for (const [clientId, group] of Object.entries(byClient)) {
+    const { client, rentals: clientRentals } = group;
+    const clientName = client.contactName || client.name;
 
-    const message = rule.template
-      .replace(/\{clientName\}/g, rental.client.contactName || rental.client.name)
-      .replace(/\{computerName\}/g, `${rental.computer.brand} ${rental.computer.model}`)
-      .replace(/\{computerId\}/g, rental.computer.internalId)
-      .replace(/\{daysLeft\}/g, daysLeft !== null ? String(Math.abs(daysLeft)) : 'לא ידוע')
-      .replace(/\{expectedReturn\}/g, rental.expectedReturn ? new Date(rental.expectedReturn).toLocaleDateString('he-IL') : 'חודשי')
-      .replace(/\{senderName\}/g, senderName)
-      .replace(/\{responseUrl\}/g, responseUrl);
+    let message;
+    if (clientRentals.length === 1) {
+      // Single rental — use the original template
+      const rental = clientRentals[0];
+      const token = crypto.randomBytes(16).toString('hex');
+      await prisma.rentalResponse.create({
+        data: { token, rentalId: rental.id },
+      });
+      const responseUrl = getResponseUrl(token);
+      const daysLeft = rental.expectedReturn
+        ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
+        : null;
 
-    const result = await sendWhatsApp(rental.client.phone, message);
+      message = rule.template
+        .replace(/\{clientName\}/g, clientName)
+        .replace(/\{computerName\}/g, `${rental.computer.brand} ${rental.computer.model}`)
+        .replace(/\{computerId\}/g, rental.computer.internalId)
+        .replace(/\{daysLeft\}/g, daysLeft !== null ? String(Math.abs(daysLeft)) : 'לא ידוע')
+        .replace(/\{expectedReturn\}/g, rental.expectedReturn ? new Date(rental.expectedReturn).toLocaleDateString('he-IL') : 'חודשי')
+        .replace(/\{senderName\}/g, senderName)
+        .replace(/\{responseUrl\}/g, responseUrl);
+    } else {
+      // Multiple rentals — build combined message
+      const computerLines = [];
+      const responseLines = [];
+      for (const rental of clientRentals) {
+        const token = crypto.randomBytes(16).toString('hex');
+        await prisma.rentalResponse.create({
+          data: { token, rentalId: rental.id },
+        });
+        const responseUrl = getResponseUrl(token);
+        const daysLeft = rental.expectedReturn
+          ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
+          : null;
+        const returnInfo = rental.expectedReturn
+          ? `עד ${new Date(rental.expectedReturn).toLocaleDateString('he-IL')}${daysLeft !== null ? ` (עוד ${Math.abs(daysLeft)} ימים)` : ''}`
+          : 'חודשי מתחדש';
+        computerLines.push(`• ${rental.computer.internalId} (${rental.computer.brand} ${rental.computer.model}) — ${returnInfo}`);
+        responseLines.push(`${rental.computer.internalId}: ${responseUrl}`);
+      }
 
-    await prisma.whatsAppLog.create({
-      data: {
-        rentalId: rental.id,
-        clientId: rental.clientId,
-        phone: rental.client.phone,
-        message: `[${rule.name}] ${message}`,
-        status: result.sent ? 'SENT' : 'FAILED',
-        response: result.sent ? null : (result.reason || null),
-      },
-    });
+      message = `היי ${clientName}, כאן ${senderName} ממחלקת התפעול\n` +
+        `שמנו לב שיש לך ${clientRentals.length} מחשבים שמתקרבים לסוף תקופת ההשכרה:\n\n` +
+        computerLines.join('\n') +
+        `\n\nלכל מחשב ניתן לבחור: חידוש / החזרה / שליח לאיסוף\n` +
+        responseLines.join('\n');
+    }
+
+    const result = await sendWhatsApp(client.phone, message);
+
+    // Log for each rental in the group
+    for (const rental of clientRentals) {
+      await prisma.whatsAppLog.create({
+        data: {
+          rentalId: rental.id,
+          clientId,
+          phone: client.phone,
+          message: `[${rule.name}] ${message}`,
+          status: result.sent ? 'SENT' : 'FAILED',
+          response: result.sent ? null : (result.reason || null),
+        },
+      });
+    }
 
     if (result.sent) sentCount++;
   }
 
-  console.log(`[Scheduler] Rule "${rule.name}": ${rentals.length} matched, ${sentCount} sent`);
+  console.log(`[Scheduler] Rule "${rule.name}": ${rentals.length} matched, ${Object.keys(byClient).length} clients, ${sentCount} sent`);
 }
 
 async function checkOverdueBilling() {
