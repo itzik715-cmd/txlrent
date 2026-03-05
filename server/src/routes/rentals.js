@@ -211,18 +211,50 @@ router.post('/bulk', async (req, res, next) => {
   }
 });
 
-// PUT /api/rentals/:id — update rental details
+// PUT /api/rentals/:id — update rental details (including computer swap and client change)
 router.put('/:id', async (req, res, next) => {
   try {
     const rental = await prisma.rental.findUnique({ where: { id: req.params.id } });
     if (!rental) return res.status(404).json({ error: 'השכרה לא נמצאה' });
 
-    const { startDate, expectedReturn, priceMonthly, notes } = req.body;
+    const { startDate, expectedReturn, priceMonthly, notes, computerId, clientId } = req.body;
     const data = {};
     if (startDate) data.startDate = new Date(startDate);
     if (expectedReturn) data.expectedReturn = new Date(expectedReturn);
     if (priceMonthly !== undefined) data.priceMonthly = parseFloat(priceMonthly);
     if (notes !== undefined) data.notes = notes;
+    if (clientId) data.clientId = clientId;
+
+    // Computer swap — release old, assign new
+    if (computerId && computerId !== rental.computerId) {
+      const newComp = await prisma.computer.findUnique({ where: { id: computerId } });
+      if (!newComp) return res.status(404).json({ error: 'מחשב לא נמצא' });
+      if (newComp.status !== 'AVAILABLE') {
+        return res.status(400).json({ error: 'המחשב החדש אינו זמין' });
+      }
+
+      data.computerId = computerId;
+
+      const updated = await prisma.$transaction(async (tx) => {
+        // Release old computer
+        await tx.computer.update({
+          where: { id: rental.computerId },
+          data: { status: 'AVAILABLE' },
+        });
+        // Assign new computer
+        await tx.computer.update({
+          where: { id: computerId },
+          data: { status: 'RENTED' },
+        });
+        return tx.rental.update({
+          where: { id: req.params.id },
+          data,
+          include: { computer: true, client: true, billingCycles: true },
+        });
+      });
+
+      return res.json(updated);
+    }
 
     const updated = await prisma.rental.update({
       where: { id: req.params.id },

@@ -199,6 +199,8 @@ export default function Rentals() {
       {detailRentalId && (
         <RentalDetail
           rentalId={detailRentalId}
+          clients={clients}
+          availableComputers={availableComputers}
           onClose={() => setDetailRentalId(null)}
           onReturn={(rental) => { setDetailRentalId(null); setReturnRental(rental) }}
           onNavigateToComputer={(id) => { setDetailRentalId(null); navigate(`/computers?detail=${id}`) }}
@@ -221,21 +223,40 @@ export default function Rentals() {
 }
 
 /* ─── Rental Detail ─── */
-function RentalDetail({ rentalId, onClose, onReturn, onNavigateToComputer, onNavigateToClient }) {
+function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose, onReturn, onNavigateToComputer, onNavigateToClient }) {
   const queryClient = useQueryClient()
   const rental = useRentalFromList(rentalId)
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
+  const [showAddComputers, setShowAddComputers] = useState(false)
+  const [addCompIds, setAddCompIds] = useState(new Set())
+  const [addCompSearch, setAddCompSearch] = useState('')
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['rentals'] })
+    queryClient.invalidateQueries({ queryKey: ['computers'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+  }
 
   const updateMutation = useMutation({
     mutationFn: (data) => api.put(`/rentals/${rentalId}`, data).then((r) => r.data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rentals'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      invalidateAll()
       toast.success('ההשכרה עודכנה')
       setEditing(false)
     },
     onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בעדכון'),
+  })
+
+  const addComputersMutation = useMutation({
+    mutationFn: (data) => api.post('/rentals/bulk', data).then((r) => r.data),
+    onSuccess: (data) => {
+      invalidateAll()
+      toast.success(`${data.count} מחשבים נוספו להשכרה`)
+      setShowAddComputers(false)
+      setAddCompIds(new Set())
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בהוספת מחשבים'),
   })
 
   if (!rental) {
@@ -254,12 +275,33 @@ function RentalDetail({ rentalId, onClose, onReturn, onNavigateToComputer, onNav
     ? Math.ceil((new Date(rental.actualReturn) - new Date(rental.startDate)) / (1000 * 60 * 60 * 24))
     : Math.ceil((new Date() - new Date(rental.startDate)) / (1000 * 60 * 60 * 24))
 
+  // Computers available for swap: available ones + current one
+  const swapComputers = useMemo(() => {
+    if (!rental) return []
+    const current = rental.computer
+    const list = availableComputers.filter(c => (c._id || c.id) !== rental.computerId)
+    if (current) list.unshift(current)
+    return list
+  }, [availableComputers, rental])
+
+  const addableComputers = useMemo(() => {
+    if (!addCompSearch) return availableComputers
+    const q = addCompSearch.toLowerCase()
+    return availableComputers.filter(c =>
+      (c.internalId || '').toLowerCase().includes(q) ||
+      (c.brand || '').toLowerCase().includes(q) ||
+      (c.model || '').toLowerCase().includes(q)
+    )
+  }, [availableComputers, addCompSearch])
+
   const startEdit = () => {
     setEditForm({
       startDate: toInputDate(rental.startDate),
       expectedReturn: toInputDate(rental.expectedReturn),
       priceMonthly: rental.priceMonthly || '',
       notes: rental.notes || '',
+      computerId: rental.computerId,
+      clientId: rental.clientId,
     })
     setEditing(true)
   }
@@ -271,6 +313,20 @@ function RentalDetail({ rentalId, onClose, onReturn, onNavigateToComputer, onNav
       expectedReturn: editForm.expectedReturn,
       priceMonthly: Number(editForm.priceMonthly),
       notes: editForm.notes,
+      computerId: editForm.computerId,
+      clientId: editForm.clientId,
+    })
+  }
+
+  const handleAddComputers = () => {
+    if (addCompIds.size === 0) return
+    addComputersMutation.mutate({
+      computerIds: Array.from(addCompIds),
+      clientId: rental.clientId,
+      startDate: rental.startDate,
+      expectedReturn: rental.expectedReturn,
+      priceMonthly: rental.priceMonthly,
+      notes: rental.notes,
     })
   }
 
@@ -315,6 +371,28 @@ function RentalDetail({ rentalId, onClose, onReturn, onNavigateToComputer, onNav
       {editing ? (
         /* ─── Edit Mode ─── */
         <form onSubmit={saveEdit} className="space-y-3">
+          {/* Client selector */}
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">לקוח</label>
+            <select value={editForm.clientId} onChange={(e) => setEditForm(f => ({ ...f, clientId: e.target.value }))} className={inputClass}>
+              {clients.map((c) => (
+                <option key={c._id || c.id} value={c._id || c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Computer swap */}
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">מחשב</label>
+            <select value={editForm.computerId} onChange={(e) => setEditForm(f => ({ ...f, computerId: e.target.value }))} className={inputClass}>
+              {swapComputers.map((c) => (
+                <option key={c._id || c.id} value={c._id || c.id}>
+                  {c.internalId} — {c.brand} {c.model} {(c._id || c.id) === rental.computerId ? '(נוכחי)' : '(פנוי)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">תאריך התחלה</label>
@@ -395,6 +473,15 @@ function RentalDetail({ rentalId, onClose, onReturn, onNavigateToComputer, onNav
                   <Pencil className="w-3.5 h-3.5" />
                   עריכה
                 </button>
+                {availableComputers.length > 0 && (
+                  <button
+                    onClick={() => setShowAddComputers(!showAddComputers)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    הוסף מחשבים
+                  </button>
+                )}
                 <button
                   onClick={() => onReturn(rental)}
                   className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"
@@ -405,6 +492,63 @@ function RentalDetail({ rentalId, onClose, onReturn, onNavigateToComputer, onNav
               </>
             )}
           </div>
+
+          {/* Add more computers panel */}
+          {showAddComputers && (
+            <div className="border border-accent/30 rounded-sm p-3 space-y-3 bg-accent-soft/30">
+              <p className="text-xs font-semibold text-text-secondary">
+                הוסף מחשבים ללקוח {rental.client?.name || rental.clientName} באותם תנאים ({formatCurrency(rental.priceMonthly)}/חודש)
+              </p>
+              {availableComputers.length > 3 && (
+                <input
+                  type="text"
+                  value={addCompSearch}
+                  onChange={(e) => setAddCompSearch(e.target.value)}
+                  placeholder="חיפוש מחשב..."
+                  className="w-full px-3 py-1.5 bg-bg border border-border rounded-sm text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-all duration-150"
+                />
+              )}
+              <div className="max-h-[200px] overflow-y-auto border border-border rounded-sm divide-y divide-border/50 bg-surface">
+                {addableComputers.length === 0 ? (
+                  <p className="text-xs text-text-tertiary text-center py-4">אין מחשבים פנויים</p>
+                ) : (
+                  addableComputers.map((comp) => {
+                    const id = comp._id || comp.id
+                    const isSelected = addCompIds.has(id)
+                    return (
+                      <div
+                        key={id}
+                        onClick={() => setAddCompIds(prev => {
+                          const next = new Set(prev)
+                          if (next.has(id)) next.delete(id)
+                          else next.add(id)
+                          return next
+                        })}
+                        className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-all duration-100 ${isSelected ? 'bg-accent-soft' : 'hover:bg-bg'}`}
+                      >
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150 ${isSelected ? 'bg-accent border-accent' : 'border-border'}`}>
+                          {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                        </div>
+                        <span className="text-xs font-semibold text-accent">{comp.internalId}</span>
+                        <span className="text-xs text-text-secondary">{comp.brand} {comp.model}</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button type="button" onClick={() => { setShowAddComputers(false); setAddCompIds(new Set()) }} className="px-3 py-1.5 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150">ביטול</button>
+                <button
+                  type="button"
+                  onClick={handleAddComputers}
+                  disabled={addCompIds.size === 0 || addComputersMutation.isPending}
+                  className="px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  {addComputersMutation.isPending ? 'מוסיף...' : `הוסף ${addCompIds.size || ''} מחשבים`}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </Modal>
