@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User, MessageCircle } from 'lucide-react'
+import { Plus, RotateCcw, Check, Pencil, ExternalLink, Calendar, CreditCard, User, MessageCircle, Monitor } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -72,6 +72,8 @@ export default function Rentals() {
     },
   })
 
+  const [detailClientGroup, setDetailClientGroup] = useState(null)
+
   const filtered = rentals.filter((r) => {
     const matchesStatus = statusFilter === 'all' || r.status === statusFilter
     const q = search.toLowerCase()
@@ -82,53 +84,83 @@ export default function Rentals() {
     return matchesStatus && matchesSearch
   })
 
+  // Group filtered rentals by clientId
+  const groupedRows = useMemo(() => {
+    const groups = {}
+    for (const r of filtered) {
+      const key = r.clientId || r.clientName || 'unknown'
+      if (!groups[key]) {
+        groups[key] = {
+          id: key,
+          clientId: r.clientId,
+          clientName: r.clientName || r.client?.name || '-',
+          rentals: [],
+        }
+      }
+      groups[key].rentals.push(r)
+    }
+    return Object.values(groups).map(g => {
+      const computers = g.rentals.map(r => r.computerInternalId || r.computer?.internalId || '-')
+      const totalPrice = g.rentals.reduce((s, r) => s + (Number(r.priceMonthly) || 0), 0)
+      const statuses = [...new Set(g.rentals.map(r => r.status))]
+      const worstStatus = statuses.includes('OVERDUE') ? 'OVERDUE' : statuses.includes('ACTIVE') ? 'ACTIVE' : statuses[0]
+      const earliest = g.rentals.reduce((min, r) => !min || new Date(r.startDate) < new Date(min) ? r.startDate : min, null)
+      return {
+        ...g,
+        computers,
+        computerCount: g.rentals.length,
+        totalPrice,
+        worstStatus,
+        startDate: earliest,
+      }
+    })
+  }, [filtered])
+
   const columns = [
-    {
-      key: 'computerInternalId',
-      label: 'מחשב',
-      render: (val) => (
-        <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">
-          {val || '-'}
-        </span>
+    { key: 'clientName', label: 'לקוח',
+      render: (val, row) => (
+        <div className="flex items-center gap-2">
+          <User className="w-3.5 h-3.5 text-text-tertiary" />
+          <span className="font-medium">{val}</span>
+        </div>
       ),
     },
-    { key: 'clientName', label: 'לקוח' },
+    {
+      key: 'computers',
+      label: 'מחשבים',
+      render: (val, row) => (
+        <div className="flex flex-wrap gap-1">
+          {val.slice(0, 3).map((c, i) => (
+            <span key={i} className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">{c}</span>
+          ))}
+          {val.length > 3 && <span className="text-xs text-text-tertiary">+{val.length - 3}</span>}
+        </div>
+      ),
+    },
+    {
+      key: 'computerCount',
+      label: 'כמות',
+      render: (val) => (
+        <div className="flex items-center gap-1">
+          <Monitor className="w-3 h-3 text-text-tertiary" />
+          <span className="text-xs font-semibold">{val}</span>
+        </div>
+      ),
+    },
     {
       key: 'startDate',
       label: 'תאריך התחלה',
       render: (val) => formatDate(val),
     },
     {
-      key: 'expectedReturn',
-      label: 'תאריך החזרה',
-      render: (val, row) => row.recurring ? <span className="text-xs font-medium text-accent">חודשי</span> : formatDate(val),
-    },
-    {
-      key: 'priceMonthly',
-      label: 'מחיר',
+      key: 'totalPrice',
+      label: 'סה"כ חודשי',
       render: (val) => (val ? `${Number(val).toLocaleString('he-IL')} \u20AA` : '-'),
     },
     {
-      key: 'status',
+      key: 'worstStatus',
       label: 'סטטוס',
       render: (val) => <StatusBadge status={val} />,
-    },
-    {
-      key: 'actions',
-      label: 'פעולות',
-      render: (_, row) =>
-        row.status === 'ACTIVE' || row.status === 'OVERDUE' ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              setReturnRental(row)
-            }}
-            className="flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-          >
-            <RotateCcw className="w-3 h-3" />
-            החזרה
-          </button>
-        ) : null,
     },
   ]
 
@@ -174,8 +206,8 @@ export default function Rentals() {
       ) : (
         <DataTable
           columns={columns}
-          data={filtered}
-          onRowClick={(row) => setDetailRentalId(row.id)}
+          data={groupedRows}
+          onRowClick={(row) => row.computerCount === 1 ? setDetailRentalId(row.rentals[0].id) : setDetailClientGroup(row)}
           emptyMessage="לא נמצאו השכרות"
         />
       )}
@@ -205,6 +237,20 @@ export default function Rentals() {
           onReturn={(rental) => { setDetailRentalId(null); setReturnRental(rental) }}
           onNavigateToComputer={(id) => { setDetailRentalId(null); navigate(`/computers?detail=${id}`) }}
           onNavigateToClient={(id) => { setDetailRentalId(null); navigate(`/clients?profile=${id}`) }}
+        />
+      )}
+
+      {/* Client Group Detail */}
+      {detailClientGroup && (
+        <ClientGroupDetail
+          group={detailClientGroup}
+          clients={clients}
+          availableComputers={availableComputers}
+          onClose={() => setDetailClientGroup(null)}
+          onOpenRental={(id) => { setDetailClientGroup(null); setDetailRentalId(id) }}
+          onReturn={(rental) => { setDetailClientGroup(null); setReturnRental(rental) }}
+          onNavigateToComputer={(id) => { setDetailClientGroup(null); navigate(`/computers?detail=${id}`) }}
+          onNavigateToClient={(id) => { setDetailClientGroup(null); navigate(`/clients?profile=${id}`) }}
         />
       )}
 
@@ -643,6 +689,199 @@ function RentalDetail({ rentalId, clients = [], availableComputers = [], onClose
               </div>
             </div>
           )}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+/* ─── Client Group Detail ─── */
+function ClientGroupDetail({ group, clients, availableComputers, onClose, onOpenRental, onReturn, onNavigateToComputer, onNavigateToClient }) {
+  const queryClient = useQueryClient()
+  const [alertLoading, setAlertLoading] = useState(null)
+  const [alertPreview, setAlertPreview] = useState(null) // { rentalId, message, phone }
+
+  const sendCustomMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-custom', data).then(r => r.data),
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success('הודעת WhatsApp נשלחה ללקוח')
+        setAlertPreview(null)
+      } else toast.error(data.reason || 'שליחה נכשלה')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
+  })
+
+  const openAlertPreview = async (rental) => {
+    setAlertLoading(rental.id)
+    try {
+      const { data } = await api.post(`/whatsapp/prepare-alert/${rental.id}`)
+      setAlertPreview({ rentalId: rental.id, message: data.message, phone: rental.client?.phone })
+    } catch {
+      toast.error('שגיאה בטעינת תבנית')
+    } finally {
+      setAlertLoading(null)
+    }
+  }
+
+  const totalPrice = group.rentals.reduce((s, r) => s + (Number(r.priceMonthly) || 0), 0)
+  const activeRentals = group.rentals.filter(r => r.status === 'ACTIVE' || r.status === 'OVERDUE')
+  const returnedRentals = group.rentals.filter(r => r.status === 'RETURNED')
+
+  return (
+    <Modal
+      title={`${group.clientName} — ${group.rentals.length} מחשבים`}
+      onClose={onClose}
+      wide
+    >
+      {/* Client header */}
+      <div className="flex flex-wrap items-center gap-4 mb-5">
+        <button
+          onClick={() => onNavigateToClient(group.clientId)}
+          className="flex items-center gap-1.5 text-sm font-bold text-accent hover:underline"
+        >
+          <User className="w-3.5 h-3.5" />
+          {group.clientName}
+          <ExternalLink className="w-3 h-3" />
+        </button>
+        <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <Monitor className="w-3.5 h-3.5" />
+          {group.rentals.length} מחשבים
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <CreditCard className="w-3.5 h-3.5" />
+          סה"כ: {formatCurrency(totalPrice)}/חודש
+        </div>
+      </div>
+
+      {/* Active rentals */}
+      {activeRentals.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-xs font-semibold text-text-secondary mb-2">השכרות פעילות ({activeRentals.length})</h3>
+          <div className="border border-border rounded-sm divide-y divide-border/50">
+            {activeRentals.map(rental => (
+              <div key={rental.id} className="p-3 hover:bg-bg transition-all duration-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-accent bg-accent-soft px-2 py-0.5 rounded">
+                      {rental.computerInternalId || rental.computer?.internalId || '-'}
+                    </span>
+                    <span className="text-xs text-text-secondary">
+                      {rental.computer?.brand} {rental.computer?.model}
+                    </span>
+                    <StatusBadge status={rental.status} />
+                    {rental.recurring && (
+                      <span className="text-xs font-medium text-accent">חודשי</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-text-tertiary">{formatCurrency(rental.priceMonthly)}/חודש</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-xs text-text-tertiary">
+                  <span>התחלה: {formatDate(rental.startDate)}</span>
+                  {!rental.recurring && <span>החזרה צפויה: {formatDate(rental.expectedReturn)}</span>}
+                </div>
+                <div className="flex flex-wrap gap-2 mt-2 justify-end">
+                  <button
+                    onClick={() => onOpenRental(rental.id)}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-accent border border-accent/30 rounded-sm hover:bg-accent-soft transition-all duration-150"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    פרטים
+                  </button>
+                  <button
+                    onClick={() => openAlertPreview(rental)}
+                    disabled={alertLoading === rental.id}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-semibold text-white bg-green-600 rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                  >
+                    <MessageCircle className="w-3 h-3" />
+                    {alertLoading === rental.id ? 'טוען...' : 'שלח התראה'}
+                  </button>
+                  <button
+                    onClick={() => onNavigateToComputer(rental.computerId)}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-text-secondary border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150"
+                  >
+                    <Monitor className="w-3 h-3" />
+                    מחשב
+                  </button>
+                  <button
+                    onClick={() => onReturn(rental)}
+                    className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-text-secondary border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    החזרה
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Returned rentals */}
+      {returnedRentals.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-xs font-semibold text-text-secondary mb-2">הוחזרו ({returnedRentals.length})</h3>
+          <div className="border border-border rounded-sm divide-y divide-border/50 opacity-70">
+            {returnedRentals.map(rental => (
+              <div key={rental.id} className="p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-text-tertiary bg-bg px-2 py-0.5 rounded">
+                    {rental.computerInternalId || rental.computer?.internalId || '-'}
+                  </span>
+                  <span className="text-xs text-text-tertiary">
+                    {rental.computer?.brand} {rental.computer?.model}
+                  </span>
+                  <StatusBadge status={rental.status} />
+                </div>
+                <button
+                  onClick={() => onOpenRental(rental.id)}
+                  className="text-xs font-medium text-accent hover:underline"
+                >
+                  פרטים
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Alert Preview */}
+      {alertPreview && (
+        <div className="border border-green-300 rounded-sm p-4 mt-3 bg-green-50 space-y-3">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="w-4 h-4 text-green-600" />
+            <span className="text-sm font-bold text-text-primary">תצוגה מקדימה — WhatsApp ל-{group.clientName}</span>
+            <span className="text-xs text-text-tertiary">({alertPreview.phone})</span>
+          </div>
+          <textarea
+            value={alertPreview.message}
+            onChange={(e) => setAlertPreview(prev => ({ ...prev, message: e.target.value }))}
+            rows={8}
+            dir="rtl"
+            className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent transition-all duration-150 resize-y leading-relaxed"
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setAlertPreview(null)}
+              className="px-3 py-1.5 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150"
+            >
+              ביטול
+            </button>
+            <button
+              onClick={() => sendCustomMutation.mutate({
+                phone: alertPreview.phone,
+                message: alertPreview.message,
+                clientId: group.clientId,
+              })}
+              disabled={!alertPreview.message.trim() || sendCustomMutation.isPending}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+            >
+              <MessageCircle className="w-3 h-3" />
+              {sendCustomMutation.isPending ? 'שולח...' : 'שלח WhatsApp'}
+            </button>
+          </div>
         </div>
       )}
     </Modal>
