@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, QrCode } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Plus, QrCode, ArrowRight, Pencil, Calendar, User, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -28,14 +29,27 @@ const emptyForm = {
   notes: '',
 }
 
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString('he-IL') : '-')
+const formatCurrency = (v) => (v ? `${Number(v).toLocaleString('he-IL')} \u20AA` : '-')
+
 export default function Computers() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
-  const [showDetail, setShowDetail] = useState(null)
+  const [detailId, setDetailId] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [editId, setEditId] = useState(null)
+
+  // Open detail from URL param (e.g. /computers?detail=xxx)
+  useEffect(() => {
+    const d = searchParams.get('detail')
+    if (d) {
+      setDetailId(d)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const { data: computers = [], isLoading } = useQuery({
     queryKey: ['computers'],
@@ -49,12 +63,13 @@ export default function Computers() {
         : api.post('/computers', data).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['computer-detail'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
       toast.success(editId ? 'המחשב עודכן בהצלחה' : 'המחשב נוסף בהצלחה')
       closeModal()
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message || 'שגיאה בשמירה')
+      toast.error(err.response?.data?.error || 'שגיאה בשמירה')
     },
   })
 
@@ -83,15 +98,14 @@ export default function Computers() {
       model: computer.model || '',
       brand: computer.brand || '',
       serial: computer.serial || '',
-      ram: computer.specs?.ram || computer.ram || '',
-      cpu: computer.specs?.cpu || computer.cpu || '',
-      storage: computer.specs?.storage || computer.storage || '',
+      ram: computer.specs?.ram || '',
+      cpu: computer.specs?.cpu || '',
+      storage: computer.specs?.storage || '',
       priceMonthly: computer.priceMonthly || '',
       status: computer.status || 'AVAILABLE',
       notes: computer.notes || '',
     })
     setShowModal(true)
-    setShowDetail(null)
   }
 
   const closeModal = () => {
@@ -124,7 +138,7 @@ export default function Computers() {
     {
       key: 'priceMonthly',
       label: 'מחיר חודשי',
-      render: (val) => (val ? `${Number(val).toLocaleString('he-IL')} \u20AA` : '-'),
+      render: (val) => formatCurrency(val),
     },
     {
       key: 'actions',
@@ -186,7 +200,7 @@ export default function Computers() {
         <DataTable
           columns={columns}
           data={filtered}
-          onRowClick={(row) => setShowDetail(row)}
+          onRowClick={(row) => setDetailId(row.id)}
           emptyMessage="לא נמצאו מחשבים"
         />
       )}
@@ -206,12 +220,7 @@ export default function Computers() {
               <FormField label="CPU" value={form.cpu} onChange={(v) => updateField('cpu', v)} placeholder="i7-1260P" />
               <FormField label="אחסון" value={form.storage} onChange={(v) => updateField('storage', v)} placeholder="512GB SSD" />
             </div>
-            <FormField
-              label="מחיר חודשי"
-              value={form.priceMonthly}
-              onChange={(v) => updateField('priceMonthly', v)}
-              type="number"
-            />
+            <FormField label="מחיר חודשי" value={form.priceMonthly} onChange={(v) => updateField('priceMonthly', v)} type="number" />
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">סטטוס</label>
               <select
@@ -235,18 +244,10 @@ export default function Computers() {
               />
             </div>
             <div className="flex gap-3 justify-end pt-2">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"
-              >
+              <button type="button" onClick={closeModal} className="px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150">
                 ביטול
               </button>
-              <button
-                type="submit"
-                disabled={saveMutation.isPending}
-                className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
-              >
+              <button type="submit" disabled={saveMutation.isPending} className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50">
                 {saveMutation.isPending ? 'שומר...' : 'שמור'}
               </button>
             </div>
@@ -254,47 +255,218 @@ export default function Computers() {
         </Modal>
       )}
 
-      {/* Detail Modal */}
-      {showDetail && (
-        <Modal title={`מחשב ${showDetail.internalId}`} onClose={() => setShowDetail(null)}>
-          <div className="space-y-3">
-            <DetailRow label="מזהה" value={showDetail.internalId} />
-            <DetailRow label="דגם" value={showDetail.model} />
-            <DetailRow label="מותג" value={showDetail.brand} />
-            <DetailRow label="סריאלי" value={showDetail.serial} />
-            <DetailRow label="RAM" value={showDetail.specs?.ram || showDetail.ram} />
-            <DetailRow label="CPU" value={showDetail.specs?.cpu || showDetail.cpu} />
-            <DetailRow label="אחסון" value={showDetail.specs?.storage || showDetail.storage} />
-            <DetailRow
-              label="מחיר חודשי"
-              value={showDetail.priceMonthly ? `${Number(showDetail.priceMonthly).toLocaleString('he-IL')} \u20AA` : '-'}
-            />
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-text-tertiary w-20">סטטוס</span>
-              <StatusBadge status={showDetail.status} />
-            </div>
-            {showDetail.notes && <DetailRow label="הערות" value={showDetail.notes} />}
-            <div className="flex gap-3 justify-end pt-3 border-t border-border">
-              <button
-                onClick={() => openEdit(showDetail)}
-                className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150"
-              >
-                עריכה
-              </button>
-              <button
-                onClick={() => {
-                  toast.success('QR Code נוצר (בקרוב)')
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                צור QR
-              </button>
-            </div>
-          </div>
-        </Modal>
+      {/* Computer Detail Drill-Down */}
+      {detailId && (
+        <ComputerDetail
+          computerId={detailId}
+          onClose={() => setDetailId(null)}
+          onEdit={(comp) => { setDetailId(null); openEdit(comp) }}
+        />
       )}
     </div>
+  )
+}
+
+function ComputerDetail({ computerId, onClose, onEdit }) {
+  const { data: computer, isLoading } = useQuery({
+    queryKey: ['computer-detail', computerId],
+    queryFn: () => api.get(`/computers/${computerId}`).then((r) => r.data),
+  })
+
+  const [activeTab, setActiveTab] = useState('info')
+
+  if (isLoading) {
+    return (
+      <Modal title="טוען..." onClose={onClose} wide>
+        <p className="text-text-tertiary text-sm text-center py-8">טוען פרטי מחשב...</p>
+      </Modal>
+    )
+  }
+
+  if (!computer) {
+    return (
+      <Modal title="שגיאה" onClose={onClose}>
+        <p className="text-red-status text-sm">מחשב לא נמצא</p>
+      </Modal>
+    )
+  }
+
+  const rentals = computer.rentals || []
+  const activeRental = rentals.find((r) => r.status === 'ACTIVE' || r.status === 'OVERDUE')
+  const totalRevenue = rentals.reduce((sum, r) => {
+    const cycles = r.billingCycles || []
+    return sum + cycles.filter((c) => c.status === 'PAID').reduce((s, c) => s + c.amount, 0)
+  }, 0)
+  const totalRentals = rentals.length
+
+  const tabs = [
+    { key: 'info', label: 'פרטים' },
+    { key: 'history', label: `היסטוריה (${totalRentals})` },
+  ]
+
+  return (
+    <Modal title={`${computer.internalId} — ${computer.brand} ${computer.model}`} onClose={onClose} wide>
+      {/* Status + Quick Stats */}
+      <div className="flex flex-wrap gap-3 mb-5">
+        <StatusBadge status={computer.status} />
+        <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <CreditCard className="w-3.5 h-3.5" />
+          <span>{formatCurrency(computer.priceMonthly)}/חודש</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+          <Calendar className="w-3.5 h-3.5" />
+          <span>{totalRentals} השכרות</span>
+        </div>
+        {totalRevenue > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-green-status font-semibold">
+            <span>הכנסה: {formatCurrency(totalRevenue)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Current Rental Banner */}
+      {activeRental && (
+        <div className="bg-accent-soft border border-accent/20 rounded-md p-3 mb-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <User className="w-4 h-4 text-accent" />
+              <div>
+                <span className="text-sm font-semibold text-text-primary">{activeRental.client?.name || 'לקוח'}</span>
+                <span className="text-xs text-text-secondary mr-3">
+                  מ-{formatDate(activeRental.startDate)} עד {formatDate(activeRental.expectedReturn)}
+                </span>
+              </div>
+            </div>
+            <StatusBadge status={activeRental.status} />
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-border pb-3">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-sm transition-all duration-150 ${
+              activeTab === tab.key ? 'bg-accent text-white' : 'text-text-secondary hover:text-accent'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Info Tab */}
+      {activeTab === 'info' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+            <DetailRow label="מזהה" value={computer.internalId} />
+            <DetailRow label="סריאלי" value={computer.serial} />
+            <DetailRow label="מותג" value={computer.brand} />
+            <DetailRow label="דגם" value={computer.model} />
+            <DetailRow label="RAM" value={computer.specs?.ram} />
+            <DetailRow label="CPU" value={computer.specs?.cpu} />
+            <DetailRow label="אחסון" value={computer.specs?.storage} />
+            <DetailRow label="מחיר חודשי" value={formatCurrency(computer.priceMonthly)} />
+          </div>
+          {computer.notes && (
+            <div className="pt-2 border-t border-border">
+              <DetailRow label="הערות" value={computer.notes} />
+            </div>
+          )}
+          <div className="flex gap-3 justify-end pt-3 border-t border-border">
+            <button
+              onClick={() => onEdit(computer)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              עריכה
+            </button>
+            <button
+              onClick={() => {
+                api.post(`/computers/${computer.id}/generate-qr`).then((res) => {
+                  toast.success('QR Code נוצר בהצלחה')
+                }).catch(() => toast.error('שגיאה ביצירת QR'))
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent hover:bg-accent-soft transition-all duration-150"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              צור QR
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* History Tab */}
+      {activeTab === 'history' && (
+        <div className="space-y-3">
+          {rentals.length > 0 ? (
+            rentals.map((rental) => {
+              const cycles = rental.billingCycles || []
+              const paidAmount = cycles.filter((c) => c.status === 'PAID').reduce((s, c) => s + c.amount, 0)
+              const pendingAmount = cycles.filter((c) => c.status !== 'PAID').reduce((s, c) => s + c.amount, 0)
+              const duration = rental.actualReturn
+                ? Math.ceil((new Date(rental.actualReturn) - new Date(rental.startDate)) / (1000 * 60 * 60 * 24))
+                : Math.ceil((new Date() - new Date(rental.startDate)) / (1000 * 60 * 60 * 24))
+
+              return (
+                <div key={rental.id} className="bg-bg rounded-md p-4 border border-border/50">
+                  {/* Rental header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <User className="w-4 h-4 text-text-tertiary" />
+                      <span className="text-sm font-semibold text-text-primary">{rental.client?.name || 'לקוח'}</span>
+                      <StatusBadge status={rental.status} />
+                    </div>
+                    <span className="text-xs text-text-tertiary">{duration} ימים</span>
+                  </div>
+
+                  {/* Rental details grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-text-tertiary">התחלה</span>
+                      <div className="font-medium text-text-primary mt-0.5">{formatDate(rental.startDate)}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary">החזרה צפויה</span>
+                      <div className="font-medium text-text-primary mt-0.5">{formatDate(rental.expectedReturn)}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary">הוחזר בפועל</span>
+                      <div className="font-medium text-text-primary mt-0.5">{rental.actualReturn ? formatDate(rental.actualReturn) : 'טרם הוחזר'}</div>
+                    </div>
+                    <div>
+                      <span className="text-text-tertiary">מחיר חודשי</span>
+                      <div className="font-medium text-text-primary mt-0.5">{formatCurrency(rental.priceMonthly)}</div>
+                    </div>
+                  </div>
+
+                  {/* Billing summary */}
+                  {cycles.length > 0 && (
+                    <div className="flex gap-4 mt-3 pt-3 border-t border-border/50 text-xs">
+                      <span className="text-green-status font-semibold">שולם: {formatCurrency(paidAmount)}</span>
+                      {pendingAmount > 0 && (
+                        <span className="text-orange-status font-semibold">ממתין: {formatCurrency(pendingAmount)}</span>
+                      )}
+                      <span className="text-text-tertiary">{cycles.length} חיובים</span>
+                    </div>
+                  )}
+
+                  {rental.notes && (
+                    <div className="text-xs text-text-secondary mt-2 pt-2 border-t border-border/50">
+                      {rental.notes}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          ) : (
+            <p className="text-text-tertiary text-sm text-center py-6">אין היסטוריית השכרות למחשב זה</p>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }
 
