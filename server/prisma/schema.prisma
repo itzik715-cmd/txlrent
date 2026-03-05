@@ -129,6 +129,16 @@ model Setting {
   updatedAt DateTime @updatedAt
 }
 
+model AlertRule {
+  id        String   @id @default(cuid())
+  name      String
+  trigger   String
+  dayOffset Int
+  template  String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 model WhatsAppLog {
   id        String   @id @default(cuid())
   rentalId  String?

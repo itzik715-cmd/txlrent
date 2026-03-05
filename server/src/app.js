@@ -15,6 +15,7 @@ const importRoutes = require('./routes/import');
 const issueRoutes = require('./routes/issues');
 const settingsRoutes = require('./routes/settings');
 const whatsappRoutes = require('./routes/whatsapp');
+const alertRulesRoutes = require('./routes/alertRules');
 const responsesRoutes = require('./routes/responses');
 
 const app = express();
@@ -38,6 +39,7 @@ app.use('/api/import', authMiddleware, importRoutes);
 app.use('/api/issues', authMiddleware, issueRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
+app.use('/api/alert-rules', authMiddleware, alertRulesRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

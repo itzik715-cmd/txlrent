@@ -111,6 +111,33 @@ router.post('/send-rental-alert/:rentalId', async (req, res, next) => {
   }
 });
 
+// POST /api/whatsapp/send-custom — send custom message to a client
+router.post('/send-custom', async (req, res, next) => {
+  try {
+    const { phone, message, clientId } = req.body;
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'חסר מספר טלפון או הודעה' });
+    }
+
+    const result = await sendWhatsApp(phone, message);
+
+    // Log
+    await prisma.whatsAppLog.create({
+      data: {
+        clientId: clientId || null,
+        phone,
+        message,
+        status: result.sent ? 'SENT' : 'FAILED',
+        response: result.sent ? null : (result.reason || null),
+      },
+    });
+
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/whatsapp/logs — sent messages log
 router.get('/logs', async (req, res, next) => {
   try {

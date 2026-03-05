@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, TestTube, Send, MessageCircle, Clock, FileText, Info, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Save, Send, MessageCircle, Clock, FileText, Info, CheckCircle2, XCircle, RefreshCw, Plus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 
@@ -268,61 +268,250 @@ function TemplatesConfig({ settings }) {
   )
 }
 
-/* ─── Auto Alerts Config ─── */
+/* ─── Alert Rules Management ─── */
 function AlertsConfig({ settings }) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({
-    wa_auto_alerts: settings.wa_auto_alerts || 'false',
-    wa_alert_days_before: settings.wa_alert_days_before || '3',
-  })
+  const [showAdd, setShowAdd] = useState(false)
+  const [editingRule, setEditingRule] = useState(null)
 
-  const saveMutation = useMutation({
+  // Global auto-alerts toggle
+  const [autoEnabled, setAutoEnabled] = useState(settings.wa_auto_alerts || 'false')
+
+  const toggleMutation = useMutation({
     mutationFn: (data) => api.put('/settings', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
-      toast.success('הגדרות התראות נשמרו')
+      toast.success('נשמר')
     },
+  })
+
+  const { data: rules = [], isLoading } = useQuery({
+    queryKey: ['alert-rules'],
+    queryFn: () => api.get('/alert-rules').then(r => r.data),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/alert-rules/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
+      toast.success('הכלל נמחק')
+    },
+  })
+
+  const toggleRuleMutation = useMutation({
+    mutationFn: ({ id, enabled }) => api.put(`/alert-rules/${id}`, { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
+    },
+  })
+
+  const triggerLabels = {
+    before_return: 'לפני סיום השכרה',
+    on_return_day: 'ביום סיום ההשכרה',
+    after_overdue: 'אחרי איחור בהחזרה',
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Global Toggle */}
+      <div className="bg-surface border border-border rounded-lg p-5 space-y-3">
+        <h2 className="text-sm font-bold text-text-primary">התראות אוטומטיות</h2>
+        <p className="text-xs text-text-tertiary">
+          המערכת תריץ את כללי ההתראה כל יום בשעה 08:00 ותשלח WhatsApp ללקוחות שמתאימים לכלל
+        </p>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoEnabled === 'true'}
+            onChange={(e) => {
+              const val = e.target.checked ? 'true' : 'false'
+              setAutoEnabled(val)
+              toggleMutation.mutate({ wa_auto_alerts: val })
+            }}
+            className="w-4 h-4 rounded border-border text-accent focus:ring-accent"
+          />
+          <span className="text-sm font-medium text-text-primary">הפעל התראות אוטומטיות</span>
+        </label>
+      </div>
+
+      {/* Rules List */}
+      <div className="bg-surface border border-border rounded-lg overflow-hidden">
+        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+          <h2 className="text-sm font-bold text-text-primary">כללי התראה ({rules.length})</h2>
+          <button
+            onClick={() => { setEditingRule(null); setShowAdd(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150"
+          >
+            + הוסף כלל
+          </button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-text-tertiary text-sm text-center py-6">טוען...</p>
+        ) : rules.length === 0 ? (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-text-tertiary text-sm">אין כללי התראה. הוסיפו כלל ראשון.</p>
+            <p className="text-xs text-text-tertiary">לדוגמה: שלח הודעה 3 ימים לפני סיום ההשכרה</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {rules.map(rule => (
+              <div key={rule.id} className={`px-5 py-4 flex items-start gap-4 ${!rule.enabled ? 'opacity-50' : ''}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-bold text-text-primary">{rule.name}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${rule.enabled ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {rule.enabled ? 'פעיל' : 'מושבת'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-text-secondary mb-2">
+                    <span className="font-medium">{triggerLabels[rule.trigger] || rule.trigger}</span>
+                    {rule.trigger !== 'on_return_day' && (
+                      <span>{rule.dayOffset} ימים</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-tertiary bg-bg rounded-sm p-2 border border-border/50 whitespace-pre-wrap max-h-[60px] overflow-hidden">
+                    {rule.template.substring(0, 150)}{rule.template.length > 150 ? '...' : ''}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => toggleRuleMutation.mutate({ id: rule.id, enabled: !rule.enabled })}
+                    className={`px-2 py-1 text-xs font-medium rounded-sm ${rule.enabled ? 'text-orange-600 border border-orange-300 hover:bg-orange-50' : 'text-green-600 border border-green-300 hover:bg-green-50'}`}
+                  >
+                    {rule.enabled ? 'השבת' : 'הפעל'}
+                  </button>
+                  <button
+                    onClick={() => { setEditingRule(rule); setShowAdd(true) }}
+                    className="px-2 py-1 text-xs font-medium text-accent border border-accent/30 rounded-sm hover:bg-accent-soft"
+                  >
+                    ערוך
+                  </button>
+                  <button
+                    onClick={() => { if (confirm('למחוק את הכלל?')) deleteMutation.mutate(rule.id) }}
+                    className="px-2 py-1 text-xs font-medium text-red-600 border border-red-300 rounded-sm hover:bg-red-50"
+                  >
+                    מחק
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit Rule Modal */}
+      {showAdd && (
+        <RuleEditor
+          rule={editingRule}
+          onClose={() => { setShowAdd(false); setEditingRule(null) }}
+          senderName={settings.wa_sender_name || 'LapTrack'}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ─── Rule Editor ─── */
+function RuleEditor({ rule, onClose, senderName }) {
+  const queryClient = useQueryClient()
+  const isEdit = !!rule
+
+  const defaultTemplate = `היי {clientName}, כאן {senderName} ממחלקת התפעול
+שמנו לב שבעוד {daysLeft} ימים ({expectedReturn}) מסתיימת לך תקופת השכרת המחשב {computerId}, אבל היי אל דאגה!
+
+לבחירתך 3 אפשרויות:
+1. נא חדשו עבורי לתקופה נוספת
+2. ברצוני להחזיר לאחת מנקודות האיסוף
+3. ברצוני להזמין שליח לאיסוף המחשב בעלות 50 ש"ח
+
+לבחירה לחצו כאן: {responseUrl}`
+
+  const [form, setForm] = useState({
+    name: rule?.name || '',
+    trigger: rule?.trigger || 'before_return',
+    dayOffset: rule?.dayOffset ?? 3,
+    template: rule?.template || defaultTemplate,
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: (data) => isEdit ? api.put(`/alert-rules/${rule.id}`, data) : api.post('/alert-rules', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-rules'] })
+      toast.success(isEdit ? 'הכלל עודכן' : 'הכלל נוצר')
+      onClose()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה'),
   })
 
   const inputClass = "w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
 
   return (
-    <div className="bg-surface border border-border rounded-lg p-5 space-y-4">
-      <h2 className="text-sm font-bold text-text-primary">התראות אוטומטיות</h2>
-      <p className="text-xs text-text-tertiary">
-        המערכת תשלח הודעת WhatsApp אוטומטית ללקוחות לפני סיום תקופת ההשכרה, כל יום בשעה 08:00
-      </p>
+    <div className="bg-surface border-2 border-accent/30 rounded-lg p-5 space-y-4">
+      <h2 className="text-sm font-bold text-text-primary">{isEdit ? 'ערוך כלל התראה' : 'הוסף כלל התראה חדש'}</h2>
 
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={form.wa_auto_alerts === 'true'}
-          onChange={(e) => setForm(f => ({ ...f, wa_auto_alerts: e.target.checked ? 'true' : 'false' }))}
-          className="w-4 h-4 rounded border-border text-accent focus:ring-accent"
-        />
-        <span className="text-sm font-medium text-text-primary">הפעל התראות אוטומטיות</span>
-      </label>
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-text-secondary mb-1">שם הכלל</label>
+          <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="תזכורת 3 ימים" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-text-secondary mb-1">טריגר</label>
+          <select value={form.trigger} onChange={e => setForm(f => ({ ...f, trigger: e.target.value }))} className={inputClass}>
+            <option value="before_return">לפני סיום השכרה</option>
+            <option value="on_return_day">ביום סיום ההשכרה</option>
+            <option value="after_overdue">אחרי איחור בהחזרה</option>
+          </select>
+        </div>
+        {form.trigger !== 'on_return_day' && (
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1">
+              {form.trigger === 'before_return' ? 'ימים לפני' : 'ימים אחרי'}
+            </label>
+            <input type="number" value={form.dayOffset} onChange={e => setForm(f => ({ ...f, dayOffset: parseInt(e.target.value) || 0 }))} min="0" max="90" className={inputClass} />
+          </div>
+        )}
+      </div>
 
-      <div className="max-w-[200px]">
-        <label className="block text-xs font-medium text-text-secondary mb-1">שלח התראה X ימים לפני סיום</label>
-        <input
-          type="number"
-          value={form.wa_alert_days_before}
-          onChange={e => setForm(f => ({ ...f, wa_alert_days_before: e.target.value }))}
-          min="1"
-          max="30"
-          className={inputClass}
+      <div>
+        <label className="block text-xs font-medium text-text-secondary mb-1">תבנית הודעה</label>
+        <p className="text-xs text-text-tertiary mb-1">
+          משתנים: <code className="bg-bg px-1 rounded">{'{clientName}'}</code> <code className="bg-bg px-1 rounded">{'{computerId}'}</code> <code className="bg-bg px-1 rounded">{'{daysLeft}'}</code> <code className="bg-bg px-1 rounded">{'{expectedReturn}'}</code> <code className="bg-bg px-1 rounded">{'{senderName}'}</code> <code className="bg-bg px-1 rounded">{'{responseUrl}'}</code>
+        </p>
+        <textarea
+          value={form.template}
+          onChange={e => setForm(f => ({ ...f, template: e.target.value }))}
+          rows={8}
+          dir="rtl"
+          className={inputClass + " resize-y font-mono text-xs leading-relaxed"}
         />
       </div>
 
-      <button
-        onClick={() => saveMutation.mutate(form)}
-        disabled={saveMutation.isPending}
-        className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
-      >
-        <Save className="w-3.5 h-3.5" />
-        {saveMutation.isPending ? 'שומר...' : 'שמור'}
-      </button>
+      {/* Preview */}
+      <div>
+        <h3 className="text-xs font-semibold text-text-secondary mb-1">תצוגה מקדימה:</h3>
+        <div className="bg-green-50 border border-green-200 rounded-sm p-3 text-xs whitespace-pre-wrap leading-relaxed" dir="rtl">
+          {form.template
+            .replace(/\{clientName\}/g, 'ישראל ישראלי')
+            .replace(/\{computerName\}/g, 'LENOVO L13')
+            .replace(/\{computerId\}/g, 'TXL3881')
+            .replace(/\{daysLeft\}/g, String(form.dayOffset || 0))
+            .replace(/\{expectedReturn\}/g, '08/03/2026')
+            .replace(/\{senderName\}/g, senderName)
+            .replace(/\{responseUrl\}/g, 'https://5.100.255.162/r/abc123')}
+        </div>
+      </div>
+
+      <div className="flex gap-3 justify-end pt-2">
+        <button onClick={onClose} className="px-4 py-2 text-sm font-medium bg-transparent border-[1.5px] border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150">ביטול</button>
+        <button
+          onClick={() => saveMutation.mutate(form)}
+          disabled={!form.name || !form.template || saveMutation.isPending}
+          className="px-4 py-2 text-sm font-semibold bg-accent text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+        >
+          {saveMutation.isPending ? 'שומר...' : isEdit ? 'עדכן כלל' : 'צור כלל'}
+        </button>
+      </div>
     </div>
   )
 }

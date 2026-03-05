@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw, FileText } from 'lucide-react'
+import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw, FileText, MessageCircle, Send } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -242,10 +242,26 @@ export default function Clients() {
 function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavigateToComputer, onNavigateToRental }) {
   const queryClient = useQueryClient()
   const clientId = client._id || client.id
+  const [showWaComposer, setShowWaComposer] = useState(false)
+  const [waMessage, setWaMessage] = useState('')
 
   const { data: clientDetail } = useQuery({
     queryKey: ['client-detail', clientId],
     queryFn: () => api.get(`/clients/${clientId}`).then((r) => r.data),
+  })
+
+  const sendWaMutation = useMutation({
+    mutationFn: (data) => api.post('/whatsapp/send-custom', data).then(r => r.data),
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success('הודעת WhatsApp נשלחה!')
+        setShowWaComposer(false)
+        setWaMessage('')
+      } else {
+        toast.error(data.reason || 'שליחה נכשלה')
+      }
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'שגיאה בשליחה'),
   })
 
   const archiveMutation = useMutation({
@@ -353,6 +369,15 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
                   <Pencil className="w-3.5 h-3.5" />
                   עריכה
                 </button>
+                {client.phone && (
+                  <button
+                    onClick={() => setShowWaComposer(!showWaComposer)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    שלח WhatsApp
+                  </button>
+                )}
                 {activeCount === 0 && (
                   <button
                     onClick={() => {
@@ -368,6 +393,41 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
               </>
             )}
           </div>
+
+          {/* WhatsApp Composer */}
+          {showWaComposer && (
+            <div className="border border-green-300 rounded-sm p-4 mt-3 bg-green-50 space-y-3">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-bold text-text-primary">שלח הודעה ל-{client.name}</span>
+                <span className="text-xs text-text-tertiary">({client.phone})</span>
+              </div>
+              <textarea
+                value={waMessage}
+                onChange={(e) => setWaMessage(e.target.value)}
+                placeholder="כתוב הודעה חופשית..."
+                rows={4}
+                dir="rtl"
+                className="w-full px-3 py-2 bg-white border border-border rounded-sm text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-all duration-150 resize-y"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setShowWaComposer(false); setWaMessage('') }}
+                  className="px-3 py-1.5 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all duration-150"
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={() => sendWaMutation.mutate({ phone: client.phone, message: waMessage, clientId })}
+                  disabled={!waMessage.trim() || sendWaMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all duration-150 disabled:opacity-50"
+                >
+                  <Send className="w-3 h-3" />
+                  {sendWaMutation.isPending ? 'שולח...' : 'שלח'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -5,42 +5,91 @@ const { sendWhatsApp, getWhatsAppSettings } = require('./notifications');
 
 const prisma = new PrismaClient();
 
-async function checkExpiringRentals() {
+async function runAlertRules() {
   const settings = await getWhatsAppSettings();
   if (settings.wa_enabled !== 'true' || settings.wa_auto_alerts !== 'true') {
     console.log('[Scheduler] WhatsApp auto-alerts disabled, skipping');
     return;
   }
 
-  const daysBefore = parseInt(settings.wa_alert_days_before) || 3;
   const senderName = settings.wa_sender_name || 'LapTrack';
 
-  const targetDate = new Date();
-  targetDate.setDate(targetDate.getDate() + daysBefore);
-  targetDate.setHours(0, 0, 0, 0);
-  const nextDay = new Date(targetDate);
-  nextDay.setDate(nextDay.getDate() + 1);
-
-  const rentals = await prisma.rental.findMany({
-    where: {
-      status: 'ACTIVE',
-      recurring: false,
-      expectedReturn: { gte: targetDate, lt: nextDay },
-    },
-    include: { client: true, computer: true },
+  // Get all enabled rules
+  const rules = await prisma.alertRule.findMany({
+    where: { enabled: true },
+    orderBy: { dayOffset: 'asc' },
   });
 
-  const template = settings.wa_template_expiring || getDefaultTemplate();
+  if (rules.length === 0) {
+    console.log('[Scheduler] No alert rules configured');
+    return;
+  }
 
+  for (const rule of rules) {
+    await processRule(rule, senderName);
+  }
+}
+
+async function processRule(rule, senderName) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let rentals = [];
+
+  if (rule.trigger === 'before_return') {
+    // dayOffset days BEFORE expectedReturn
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() + rule.dayOffset);
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    rentals = await prisma.rental.findMany({
+      where: {
+        status: 'ACTIVE',
+        recurring: false,
+        expectedReturn: { gte: targetDate, lt: nextDay },
+      },
+      include: { client: true, computer: true },
+    });
+  } else if (rule.trigger === 'on_return_day') {
+    // On the day of expectedReturn
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    rentals = await prisma.rental.findMany({
+      where: {
+        status: 'ACTIVE',
+        recurring: false,
+        expectedReturn: { gte: today, lt: tomorrow },
+      },
+      include: { client: true, computer: true },
+    });
+  } else if (rule.trigger === 'after_overdue') {
+    // dayOffset days AFTER expectedReturn (overdue)
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() - rule.dayOffset);
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    rentals = await prisma.rental.findMany({
+      where: {
+        status: { in: ['ACTIVE', 'OVERDUE'] },
+        recurring: false,
+        expectedReturn: { gte: targetDate, lt: nextDay },
+      },
+      include: { client: true, computer: true },
+    });
+  }
+
+  let sentCount = 0;
   for (const rental of rentals) {
-    // Check if we already sent for this rental today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Skip if already sent for this rule+rental today
     const alreadySent = await prisma.whatsAppLog.findFirst({
       where: {
         rentalId: rental.id,
         createdAt: { gte: today },
         status: 'SENT',
+        message: { contains: rule.name },
       },
     });
     if (alreadySent) continue;
@@ -52,14 +101,16 @@ async function checkExpiringRentals() {
     });
 
     const responseUrl = `https://5.100.255.162/r/${token}`;
-    const daysLeft = Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24));
+    const daysLeft = rental.expectedReturn
+      ? Math.ceil((new Date(rental.expectedReturn) - new Date()) / (1000 * 60 * 60 * 24))
+      : null;
 
-    const message = template
+    const message = rule.template
       .replace(/\{clientName\}/g, rental.client.contactName || rental.client.name)
       .replace(/\{computerName\}/g, `${rental.computer.brand} ${rental.computer.model}`)
       .replace(/\{computerId\}/g, rental.computer.internalId)
-      .replace(/\{daysLeft\}/g, String(daysLeft))
-      .replace(/\{expectedReturn\}/g, new Date(rental.expectedReturn).toLocaleDateString('he-IL'))
+      .replace(/\{daysLeft\}/g, daysLeft !== null ? String(Math.abs(daysLeft)) : 'לא ידוע')
+      .replace(/\{expectedReturn\}/g, rental.expectedReturn ? new Date(rental.expectedReturn).toLocaleDateString('he-IL') : 'חודשי')
       .replace(/\{senderName\}/g, senderName)
       .replace(/\{responseUrl\}/g, responseUrl);
 
@@ -70,14 +121,16 @@ async function checkExpiringRentals() {
         rentalId: rental.id,
         clientId: rental.clientId,
         phone: rental.client.phone,
-        message,
+        message: `[${rule.name}] ${message}`,
         status: result.sent ? 'SENT' : 'FAILED',
         response: result.sent ? null : (result.reason || null),
       },
     });
+
+    if (result.sent) sentCount++;
   }
 
-  console.log(`[Scheduler] Checked expiring rentals (${daysBefore} days): ${rentals.length} found`);
+  console.log(`[Scheduler] Rule "${rule.name}": ${rentals.length} matched, ${sentCount} sent`);
 }
 
 async function checkOverdueBilling() {
@@ -88,9 +141,6 @@ async function checkOverdueBilling() {
     where: {
       status: { in: ['PENDING', 'OVERDUE'] },
       dueDate: { lt: fourteenDaysAgo },
-    },
-    include: {
-      rental: { include: { client: true, computer: true } },
     },
   });
 
@@ -105,24 +155,12 @@ async function checkOverdueBilling() {
   console.log(`[Scheduler] Checked overdue billing: ${overdueCycles.length} cycles`);
 }
 
-function getDefaultTemplate() {
-  return `היי {clientName}, כאן {senderName} ממחלקת התפעול
-שמנו לב שבעוד {daysLeft} ימים ({expectedReturn}) מסתיימת לך תקופת השכרת המחשב {computerId}, אבל היי אל דאגה!
-
-לבחירתך 3 אפשרויות:
-1. נא חדשו עבורי לתקופה נוספת
-2. ברצוני להחזיר לאחת מנקודות האיסוף
-3. ברצוני להזמין שליח לאיסוף המחשב בעלות 50 ש"ח
-
-לבחירה לחצו כאן: {responseUrl}`;
-}
-
 function start() {
   // Run daily at 08:00
   cron.schedule('0 8 * * *', async () => {
     console.log('[Scheduler] Running daily checks...');
     try {
-      await checkExpiringRentals();
+      await runAlertRules();
       await checkOverdueBilling();
     } catch (err) {
       console.error('[Scheduler] Error:', err);
