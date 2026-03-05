@@ -296,6 +296,70 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Pending Returns Follow-up */}
+      {data.pendingReturns && data.pendingReturns.length > 0 && (
+        <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <PackageCheck className="w-4 h-4 text-yellow-600" />
+            <h2 className="text-sm font-bold text-text-primary">ממתינים להחזרה</h2>
+            <span className="text-xs font-bold text-white bg-yellow-500 rounded-full px-2 py-0.5">{data.pendingReturns.length}</span>
+          </div>
+          <div className="p-5 max-h-[350px] overflow-y-auto">
+            <div className="space-y-2">
+              {data.pendingReturns.map((item) => {
+                const isOverdue = item.daysLeft !== null && item.daysLeft < 0
+                const isToday = item.daysLeft === 0
+                return (
+                  <div key={item.id} className="flex items-center justify-between py-2.5 px-3 border border-border rounded-sm hover:bg-accent-soft/20 transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        item.returnType === 'return_courier' ? 'bg-orange-soft text-orange-status' : 'bg-accent-soft text-accent'
+                      }`}>
+                        {item.returnType === 'return_courier' ? <Truck className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
+                        {item.returnType === 'return_courier' ? 'שליח' : 'איסוף'}
+                      </div>
+                      <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
+                      <span className="text-xs text-text-tertiary">{item.computerInternalId}</span>
+                      {item.expectedDate && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          isOverdue ? 'bg-red-soft text-red-status' : isToday ? 'bg-orange-soft text-orange-status' : 'bg-accent-soft text-accent'
+                        }`}>
+                          {isOverdue ? `באיחור ${Math.abs(item.daysLeft)} ימים` : isToday ? 'היום' : `עוד ${item.daysLeft} ימים`}
+                        </span>
+                      )}
+                      {!item.expectedDate && (
+                        <span className="text-xs text-text-tertiary bg-gray-100 px-2 py-0.5 rounded-full">ללא תאריך</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          api.patch(`/dashboard/followups/${item.id}/returned`)
+                            .then(() => {
+                              queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+                              toast.success('המחשב סומן כהוחזר — ממתין לניקוי')
+                            })
+                            .catch(() => toast.error('שגיאה'))
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all"
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        הוחזר
+                      </button>
+                      {item.clientPhone && (
+                        <a href={`tel:${item.clientPhone}`} className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
+                          <Phone className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Returns: Today + This Week side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Today's Returns */}
@@ -408,67 +472,6 @@ export default function Dashboard() {
           )}
         </div>
       </div>
-
-      {/* Pending Returns Follow-up */}
-      {data.pendingReturns && data.pendingReturns.length > 0 && (
-        <div className="bg-surface rounded-lg border border-border shadow-sm hover:shadow-md hover:-translate-y-px transition-all duration-150">
-          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-            <PackageCheck className="w-4 h-4 text-yellow-600" />
-            <h2 className="text-sm font-bold text-text-primary">ממתינים להחזרה</h2>
-            <span className="text-xs font-bold text-white bg-yellow-500 rounded-full px-2 py-0.5">{data.pendingReturns.length}</span>
-          </div>
-          <div className="p-5 max-h-[350px] overflow-y-auto">
-            <div className="space-y-2">
-              {data.pendingReturns.map((item) => {
-                const isOverdue = item.daysLeft !== null && item.daysLeft < 0
-                const isToday = item.daysLeft === 0
-                return (
-                  <div key={item.id} className="flex items-center justify-between py-2.5 px-3 border border-border rounded-sm hover:bg-accent-soft/20 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        item.returnType === 'return_courier' ? 'bg-orange-soft text-orange-status' : 'bg-accent-soft text-accent'
-                      }`}>
-                        {item.returnType === 'return_courier' ? <Truck className="w-3.5 h-3.5" /> : <MapPin className="w-3.5 h-3.5" />}
-                        {item.returnType === 'return_courier' ? 'שליח' : 'איסוף'}
-                      </div>
-                      <span className="text-sm font-semibold text-text-primary">{item.clientName}</span>
-                      <span className="text-xs text-text-tertiary">{item.computerInternalId}</span>
-                      {item.expectedDate && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          isOverdue ? 'bg-red-soft text-red-status' : isToday ? 'bg-orange-soft text-orange-status' : 'bg-accent-soft text-accent'
-                        }`}>
-                          {isOverdue ? `באיחור ${Math.abs(item.daysLeft)} ימים` : isToday ? 'היום' : `עוד ${item.daysLeft} ימים`}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          api.patch(`/dashboard/followups/${item.id}/returned`)
-                            .then(() => {
-                              queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
-                              toast.success('המחשב סומן כהוחזר — ממתין לניקוי')
-                            })
-                            .catch(() => toast.error('שגיאה'))
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all"
-                      >
-                        <CheckCircle2 className="w-3 h-3" />
-                        הוחזר
-                      </button>
-                      {item.clientPhone && (
-                        <a href={`tel:${item.clientPhone}`} className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-transparent border border-border rounded-sm hover:border-accent hover:text-accent transition-all">
-                          <Phone className="w-3 h-3" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

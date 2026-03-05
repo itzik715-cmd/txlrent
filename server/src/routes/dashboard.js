@@ -213,12 +213,12 @@ router.patch('/responses/:id/handle', async (req, res, next) => {
     }
 
     // If return (pickup/courier), create follow-up and update computer status
-    if ((response.choice === 'return_pickup' || response.choice === 'return_courier') && newExpectedReturn) {
+    if (response.choice === 'return_pickup' || response.choice === 'return_courier') {
       await prisma.returnFollowup.create({
         data: {
           rentalId: response.rentalId,
           returnType: response.choice,
-          expectedDate: new Date(newExpectedReturn),
+          expectedDate: newExpectedReturn ? new Date(newExpectedReturn) : null,
         },
       });
       // Update computer to PENDING_RETURN
