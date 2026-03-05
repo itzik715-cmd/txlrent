@@ -211,6 +211,31 @@ router.post('/bulk', async (req, res, next) => {
   }
 });
 
+// PUT /api/rentals/:id — update rental details
+router.put('/:id', async (req, res, next) => {
+  try {
+    const rental = await prisma.rental.findUnique({ where: { id: req.params.id } });
+    if (!rental) return res.status(404).json({ error: 'השכרה לא נמצאה' });
+
+    const { startDate, expectedReturn, priceMonthly, notes } = req.body;
+    const data = {};
+    if (startDate) data.startDate = new Date(startDate);
+    if (expectedReturn) data.expectedReturn = new Date(expectedReturn);
+    if (priceMonthly !== undefined) data.priceMonthly = parseFloat(priceMonthly);
+    if (notes !== undefined) data.notes = notes;
+
+    const updated = await prisma.rental.update({
+      where: { id: req.params.id },
+      data,
+      include: { computer: true, client: true, billingCycles: true },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /api/rentals/:id/return — close rental
 router.put('/:id/return', async (req, res, next) => {
   try {

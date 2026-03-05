@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Plus, Pencil, ExternalLink, CreditCard, Archive, RotateCcw, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import DataTable from '../components/shared/DataTable'
@@ -25,6 +25,7 @@ const emptyForm = {
 export default function Clients() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -37,6 +38,19 @@ export default function Clients() {
     queryKey: ['clients', showArchived],
     queryFn: () => api.get(showArchived ? '/clients?archived=true' : '/clients').then((r) => r.data),
   })
+
+  // Open profile from URL param (e.g. /clients?profile=xxx)
+  useEffect(() => {
+    const profileId = searchParams.get('profile')
+    if (profileId && clients.length > 0) {
+      const client = clients.find(c => (c._id || c.id) === profileId)
+      if (client) {
+        setShowProfile(client)
+        setProfileTab('details')
+      }
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams, clients])
 
   const saveMutation = useMutation({
     mutationFn: (data) =>
@@ -215,13 +229,17 @@ export default function Clients() {
             setShowProfile(null)
             navigate(`/computers?detail=${computerId}`)
           }}
+          onNavigateToRental={(rentalId) => {
+            setShowProfile(null)
+            navigate(`/rentals?detail=${rentalId}`)
+          }}
         />
       )}
     </div>
   )
 }
 
-function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavigateToComputer }) {
+function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavigateToComputer, onNavigateToRental }) {
   const queryClient = useQueryClient()
   const clientId = client._id || client.id
 
@@ -268,9 +286,7 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
       {/* Quick Stats */}
       <div className="flex flex-wrap gap-3 mb-4">
         {isArchived && (
-          <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
-            ארכיון
-          </span>
+          <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">ארכיון</span>
         )}
         {activeCount > 0 && (
           <span className="text-xs font-semibold text-accent bg-accent-soft px-2.5 py-1 rounded-full">
@@ -386,7 +402,18 @@ function ClientProfile({ client, activeTab, onTabChange, onClose, onEdit, onNavi
                       )}
                       <StatusBadge status={rental.status} />
                     </div>
-                    <span className="text-xs text-text-tertiary">{duration} ימים</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-tertiary">{duration} ימים</span>
+                      {/* Navigate to rental detail */}
+                      <button
+                        onClick={() => onNavigateToRental(rental.id)}
+                        className="flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                        title="צפה בהשכרה"
+                      >
+                        <FileText className="w-3 h-3" />
+                        פרטים
+                      </button>
+                    </div>
                   </div>
 
                   {/* Date/price grid */}
