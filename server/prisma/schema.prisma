@@ -158,6 +158,8 @@ model RentalResponse {
   rental    Rental   @relation(fields: [rentalId], references: [id])
   choice    String?
   answered  Boolean  @default(false)
+  handled   Boolean  @default(false)
   createdAt DateTime @default(now())
   answeredAt DateTime?
+  handledAt  DateTime?
 }

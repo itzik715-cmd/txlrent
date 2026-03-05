@@ -58,9 +58,9 @@ router.get('/summary', async (req, res, next) => {
       take: 50,
     });
 
-    // Client responses (recent answered + pending)
+    // Client responses (answered but not yet handled)
     const clientResponses = await prisma.rentalResponse.findMany({
-      where: { answered: true },
+      where: { answered: true, handled: false },
       orderBy: { answeredAt: 'desc' },
       take: 20,
       include: {
@@ -146,6 +146,19 @@ router.get('/summary', async (req, res, next) => {
         rentalId: r.rentalId,
       })),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/dashboard/responses/:id/handle — mark response as handled
+router.patch('/responses/:id/handle', async (req, res, next) => {
+  try {
+    const updated = await prisma.rentalResponse.update({
+      where: { id: req.params.id },
+      data: { handled: true, handledAt: new Date() },
+    });
+    res.json(updated);
   } catch (err) {
     next(err);
   }

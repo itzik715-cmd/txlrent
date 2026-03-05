@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Monitor,
@@ -17,6 +17,7 @@ import {
   Truck,
   RefreshCw,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import api from '../lib/api'
 import StatusBadge from '../components/shared/StatusBadge'
 
@@ -36,6 +37,15 @@ const daysRemaining = (d) => {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const handleMutation = useMutation({
+    mutationFn: (id) => api.patch(`/dashboard/responses/${id}/handle`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      toast.success('סומן כטופל')
+    },
+  })
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ['dashboard-summary'],
@@ -123,7 +133,16 @@ export default function Dashboard() {
                           <span className="text-xs text-text-tertiary mr-2">{item.computerInternalId}</span>
                         </div>
                       </div>
-                      <span className="text-xs text-text-tertiary">{formatDate(item.answeredAt)}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-tertiary">{formatDate(item.answeredAt)}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMutation.mutate(item.id) }}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-green-600 text-white rounded-sm hover:opacity-90 transition-all"
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          טופל
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
