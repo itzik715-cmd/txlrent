@@ -9,6 +9,7 @@ import Clients from './pages/Clients'
 import Rentals from './pages/Rentals'
 import Settings from './pages/Settings'
 import Reports from './pages/Reports'
+import Warehouses from './pages/Warehouses'
 import Response from './pages/Response'
 // import Billing from './pages/Billing'
 
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/clients" element={<Clients />} />
         <Route path="/rentals" element={<Rentals />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/warehouses" element={<Warehouses />} />
         <Route path="/settings" element={<Settings />} />
         {/* <Route path="/billing" element={<Billing />} /> */}
         <Route path="*" element={<Navigate to="/" replace />} />

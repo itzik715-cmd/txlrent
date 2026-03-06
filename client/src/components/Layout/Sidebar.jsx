@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Laptop, Users, FileText, CreditCard, Settings, BarChart3 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../lib/api'
@@ -14,6 +14,7 @@ const navItems = [
 ]
 
 export default function Sidebar() {
+  const navigate = useNavigate()
   const { data: summary } = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: () => api.get('/dashboard/summary').then((r) => r.data),
@@ -47,7 +48,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Fleet Utilization Widget */}
-      <div className="p-4 mx-3 mb-4 bg-bg rounded-md">
+      <div className="p-4 mx-3 mb-4 bg-bg rounded-md cursor-pointer hover:ring-1 hover:ring-accent transition-all" onClick={() => navigate('/warehouses')}>
         <div className="text-xs font-semibold text-text-secondary mb-2">ניצולת צי</div>
         <div className="flex items-baseline gap-1 mb-2">
           <span className="text-2xl font-bold text-text-primary">{utilization}%</span>
