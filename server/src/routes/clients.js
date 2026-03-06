@@ -41,12 +41,12 @@ router.get('/', async (req, res, next) => {
 // POST /api/clients — create
 router.post('/', async (req, res, next) => {
   try {
-    const { name, contactName, phone, email, address, notes } = req.body;
-    if (!name || !contactName || !phone) {
-      return res.status(400).json({ error: 'נדרש שם, איש קשר וטלפון' });
+    const { name, contactName, phone, email, idNumber, address, notes } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'נדרש שם לקוח' });
     }
     const client = await prisma.client.create({
-      data: { name, contactName, phone, email, address, notes },
+      data: { name, contactName, phone, email, idNumber, address, notes },
     });
     res.status(201).json(client);
   } catch (err) {
@@ -77,10 +77,10 @@ router.get('/:id', async (req, res, next) => {
 // PUT /api/clients/:id — update
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, contactName, phone, email, address, notes } = req.body;
+    const { name, contactName, phone, email, idNumber, address, notes } = req.body;
     const client = await prisma.client.update({
       where: { id: req.params.id },
-      data: { name, contactName, phone, email, address, notes },
+      data: { name, contactName, phone, email, idNumber, address, notes },
     });
     res.json(client);
   } catch (err) {

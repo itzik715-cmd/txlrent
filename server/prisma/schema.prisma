@@ -19,6 +19,15 @@ model User {
   createdAt  DateTime @default(now())
 }
 
+model Warehouse {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  address   String?
+  notes     String?
+  createdAt DateTime   @default(now())
+  computers Computer[]
+}
+
 model Computer {
   id           String         @id @default(cuid())
   internalId   String         @unique
@@ -31,6 +40,8 @@ model Computer {
   tier         String?
   notes        String?
   qrCode       String?
+  warehouseId  String?
+  warehouse    Warehouse?     @relation(fields: [warehouseId], references: [id])
   createdAt    DateTime       @default(now())
   rentals      Rental[]
   issues       Issue[]
@@ -66,9 +77,10 @@ enum ComputerStatus {
 model Client {
   id          String    @id @default(cuid())
   name        String
-  contactName String
-  phone       String
+  contactName String?
+  phone       String?
   email       String?
+  idNumber    String?
   address     String?
   notes       String?
   archived    Boolean   @default(false)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2, ChevronDown, Filter, X, UserPlus, Search } from 'lucide-react'
+import { Plus, QrCode, Pencil, Calendar, User, CreditCard, Archive, ShoppingCart, RotateCcw, Copy, AlertTriangle, CheckCircle2, ChevronDown, Filter, X, UserPlus, Search, Warehouse } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import SearchInput from '../components/shared/SearchInput'
@@ -30,6 +30,7 @@ const emptyForm = {
   storage: '',
   tier: '',
   status: 'AVAILABLE',
+  warehouseId: '',
   notes: '',
 }
 
@@ -53,6 +54,11 @@ export default function Computers() {
   })
 
   const tiers = settings.computer_tiers ? JSON.parse(settings.computer_tiers) : defaultTiers
+
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ['warehouses'],
+    queryFn: () => api.get('/settings/warehouses').then(r => r.data),
+  })
 
   const addTierMutation = useMutation({
     mutationFn: (newTiers) => api.put('/settings', { computer_tiers: JSON.stringify(newTiers) }),
@@ -121,6 +127,7 @@ export default function Computers() {
     if (key === 'ram') return row.specs?.ram || ''
     if (key === 'storage') return row.specs?.storage || ''
     if (key === 'tier') return row.tier ? `רמה ${row.tier}` : ''
+    if (key === 'warehouse') return row.warehouse?.name || ''
     return row[key] || ''
   }
 
@@ -159,6 +166,7 @@ export default function Computers() {
       storage: computer.specs?.storage || '',
       tier: computer.tier || '',
       status: computer.status || 'AVAILABLE',
+      warehouseId: computer.warehouseId || '',
       notes: computer.notes || '',
     })
     setShowModal(true)
@@ -176,6 +184,7 @@ export default function Computers() {
     saveMutation.mutate({
       ...rest,
       tier: form.tier || null,
+      warehouseId: form.warehouseId || null,
       specs: { ram, cpu, storage },
     })
   }
@@ -194,6 +203,12 @@ export default function Computers() {
       label: 'רמה',
       filterable: true,
       render: (val) => val ? <span className="text-xs font-semibold text-accent bg-accent-soft px-1.5 py-0.5 rounded">רמה {val}</span> : '-',
+    },
+    {
+      key: 'warehouse',
+      label: 'מחסן',
+      filterable: true,
+      render: (_, row) => row.warehouse?.name || '-',
     },
     {
       key: 'status',
@@ -404,6 +419,19 @@ export default function Computers() {
                 <option value="RENTED">מושכר</option>
                 <option value="MAINTENANCE">תיקון</option>
                 <option value="LOST">אבוד</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1">מחסן</label>
+              <select
+                value={form.warehouseId}
+                onChange={(e) => updateField('warehouseId', e.target.value)}
+                className="w-full px-3 py-2 bg-bg border border-border rounded-sm text-sm text-text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-150"
+              >
+                <option value="">ללא מחסן</option>
+                {warehouses.map(w => (
+                  <option key={w.id} value={w.id}>{w.name}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -792,6 +820,7 @@ function ComputerDetail({ computerId, onClose, onEdit }) {
             <DetailRow label="CPU" value={computer.specs?.cpu} />
             <DetailRow label="אחסון" value={computer.specs?.storage} />
             <DetailRow label="רמת מחשב" value={computer.tier ? `רמה ${computer.tier}` : '-'} />
+            <DetailRow label="מחסן" value={computer.warehouse?.name || 'לא משויך'} />
           </div>
           {computer.notes && (
             <div className="pt-2 border-t border-border">

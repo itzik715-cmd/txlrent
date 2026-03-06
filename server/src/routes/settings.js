@@ -187,4 +187,59 @@ router.post('/users/:id/mfa-verify', async (req, res, next) => {
   }
 });
 
+// ─── Warehouse Management ───
+
+// GET /api/settings/warehouses
+router.get('/warehouses', async (req, res, next) => {
+  try {
+    const warehouses = await prisma.warehouse.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { computers: true } } },
+    });
+    res.json(warehouses);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/settings/warehouses
+router.post('/warehouses', async (req, res, next) => {
+  try {
+    const { name, address, notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'נדרש שם מחסן' });
+    const existing = await prisma.warehouse.findUnique({ where: { name } });
+    if (existing) return res.status(400).json({ error: 'מחסן עם שם זה כבר קיים' });
+    const warehouse = await prisma.warehouse.create({ data: { name, address, notes } });
+    res.json(warehouse);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/settings/warehouses/:id
+router.put('/warehouses/:id', async (req, res, next) => {
+  try {
+    const { name, address, notes } = req.body;
+    const warehouse = await prisma.warehouse.update({
+      where: { id: req.params.id },
+      data: { ...(name && { name }), ...(address !== undefined && { address }), ...(notes !== undefined && { notes }) },
+    });
+    res.json(warehouse);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/settings/warehouses/:id
+router.delete('/warehouses/:id', async (req, res, next) => {
+  try {
+    const count = await prisma.computer.count({ where: { warehouseId: req.params.id } });
+    if (count > 0) return res.status(400).json({ error: `לא ניתן למחוק מחסן עם ${count} מחשבים. יש להעביר אותם קודם` });
+    await prisma.warehouse.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

@@ -6,6 +6,18 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding database...');
 
+  // Ensure default warehouses exist
+  const warehouseCount = await prisma.warehouse.count();
+  if (warehouseCount === 0) {
+    await prisma.warehouse.createMany({
+      data: [
+        { name: 'ציפורית ראשי', address: 'ציפורית' },
+        { name: 'רמת גן', address: 'רמת גן' },
+      ],
+    });
+    console.log('Created 2 default warehouses');
+  }
+
   // Skip seed if data already exists
   const existingUsers = await prisma.user.count();
   if (existingUsers > 0) {

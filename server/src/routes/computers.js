@@ -16,13 +16,14 @@ const computerSchema = z.object({
   priceMonthly: z.number().optional().default(0),
   tier: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  warehouseId: z.string().optional().nullable(),
 });
 
 // GET /api/computers — list with filters, paginated
 // By default excludes SOLD and ARCHIVED. Use ?archive=true to see them.
 router.get('/', async (req, res, next) => {
   try {
-    const { status, search, page = 1, limit = 500, archive } = req.query;
+    const { status, search, page = 1, limit = 500, archive, warehouseId } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {};
@@ -34,6 +35,10 @@ router.get('/', async (req, res, next) => {
     } else {
       // Default: exclude sold and archived
       where.status = { notIn: ['SOLD', 'ARCHIVED'] };
+    }
+
+    if (warehouseId) {
+      where.warehouseId = warehouseId;
     }
 
     if (search) {
@@ -52,6 +57,7 @@ router.get('/', async (req, res, next) => {
         take: parseInt(limit),
         orderBy: { internalId: 'asc' },
         include: {
+          warehouse: true,
           rentals: {
             where: { status: 'ACTIVE' },
             include: { client: true },
@@ -107,6 +113,7 @@ router.get('/:id', async (req, res, next) => {
     const computer = await prisma.computer.findUnique({
       where: { id: req.params.id },
       include: {
+        warehouse: true,
         rentals: {
           orderBy: { createdAt: 'desc' },
           include: { client: true, billingCycles: true },
@@ -263,6 +270,7 @@ router.post('/:id/clone', async (req, res, next) => {
           priceMonthly: computer.priceMonthly,
           tier: computer.tier,
           notes: computer.notes,
+          warehouseId: computer.warehouseId,
         },
       });
       created.push(clone);
